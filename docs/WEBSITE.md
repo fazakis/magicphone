@@ -16,7 +16,7 @@ Open `http://127.0.0.1:8765`. The three task selectors change the illustrated ph
 
 The source repository is `fazakis/magicphone`. Configure Pages to use **GitHub Actions**, then set its custom domain to **magicphone.org**. The custom domain is configured in the Pages API/settings; Actions deployments do not use a CNAME file as configuration. The canonical URL, sitemap and Open Graph metadata already use `https://magicphone.org/`.
 
-The call to action links to the source/build instructions. No APK is published by the website workflow, and the site does not advertise an unavailable production release.
+The call to action links to the 0.1.5 early-access GitHub Release, with source/build instructions still available. The release identifies the installable APK as debug signed. APKs are separate GitHub Release assets; the website workflow only publishes static site files.
 
 ## Cloudflare DNS
 
@@ -52,9 +52,12 @@ This website change does not change the Android app version or runtime behavior.
 - Published the repository at https://github.com/fazakis/magicphone; the default branch is `main`. GitHub recognizes the primary MIT license; Apache-2.0 remains an explicit alternative in LICENSE-APACHE and original-source SPDX headers.
 - [First Pages deployment](https://github.com/fazakis/magicphone/actions/runs/36931116016) passed. Only the static site was uploaded.
 - Visually inspected desktop, tablet (768 px) and narrow phone (320/390 px) layouts. Checked horizontal overflow, all three example interactions, FAQ expansion and local asset/anchor integrity. No browser console errors or missing images were found.
-- Fetched the published HTML and CSS from GitHub Pages using the custom hostname with a direct DNS override; their SHA-256 values matched the local files. This verifies the deployed content without claiming that public DNS is configured.
-- The Pages custom domain is registered as `magicphone.org`. At the time of verification, Cloudflare had no apex A records or www CNAME; public domain resolution and certificate provisioning remain pending. Apply the records above, then enable HTTPS after GitHub makes it available.
+- Fetched the published HTML and CSS from GitHub Pages using the custom hostname with a direct DNS override; their SHA-256 values matched the local files.
+- Added all five records above through the user-authorized Cloudflare session, with DNS-only status and Auto TTL. Cloudflare retained the records after reload, and both public resolvers 1.1.1.1 and 8.8.8.8 resolved the four apex addresses and www CNAME.
+- GitHub approved a certificate covering `magicphone.org` and `www.magicphone.org`; the user enabled Enforce HTTPS. Verified a certificate-validated HTTPS 200 for the apex, HTTP → HTTPS 301, and www → apex 301. This Mac still had a cached negative DNS answer, so these origin checks used the published IP with the correct hostname; the user independently confirmed the live site works.
 - The Android app remains at 0.1.5. Source changes in this task are licensing headers, documentation and publishing configuration; Android runtime behavior is unchanged. The first repository push also starts the existing Android verification workflow.
 - `INSTRUCTIONS.md`, local build settings, APKs, keys and `artifacts/` are excluded from Git. Original private build-host addresses were removed from the public developer helper and verification records.
 
 The first public CI build passed compilation, unit tests, lint and release checks. Its Android 11 emulator exposed four assumptions in the previously Android-15-specific UI harness: a floating shortcut rather than Android 11's navigation button, a hardcoded Google speech package, and automatic shade dismissal (an API 31+ action). The harness now configures the version-appropriate shortcut, resolves an installed speech provider or explicitly skips that external-provider check when absent, and closes the shade manually on Android 11 while still asserting Pause/Resume/Stop. CI now runs both API 30 and API 35, with test-only notification permission setup and on-screen keyboard enabled. No production application behavior was changed to address these test-environment differences.
+
+The follow-up [hosted matrix run](https://github.com/fazakis/magicphone/actions/runs/36932298773) still failed: two shortcut tests on API 30 and five fixture/keyboard/voice tests on API 35. Build/core/lint/release checks passed. The remaining device failures are unresolved and are disclosed in the early-access APK release; the previously recorded local Android 15 checks are separate evidence.

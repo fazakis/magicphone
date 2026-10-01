@@ -14,6 +14,8 @@ The landing page lives in [`site/`](site/) in this repository and deploys indepe
 
 ## Build
 
+The installable **0.1.5 early-access APK** is available in [GitHub Releases](https://github.com/fazakis/magicphone/releases/tag/v0.1.5). Download `magicphone-0.1.5-debug.apk` for Android 11+. This is the verified development build, signed with the same Android debug certificate as the preceding QA updates; it is not production signed. The release includes checksums, signing identity, license notices and current verification limits. Install over a matching-signer build to preserve app data.
+
 Prerequisites: JDK 21, Android SDK **platform 37.0**, build-tools 36.0.0, and network access for pinned build dependencies. Set `ANDROID_HOME` or create the ignored `local.properties` with `sdk.dir=...`. `targetSdk=36`, `minSdk=30`; current Compose needs `compileSdk=37`.
 
 ```sh

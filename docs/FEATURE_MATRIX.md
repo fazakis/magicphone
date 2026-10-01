@@ -2,7 +2,7 @@
 
 Implementation and verification are separate. **Implemented** identifies actual reachable code; **unit** means deterministic host tests, **device** means instrumentation on an isolated Android emulator, and **external** means the named account/device/server is still required. See PROGRESS, [Android 15 remote verification](VERIFICATION-API35.md), and [the later Xiaomi investigation](VERIFICATION-XIAOMI.md) for exact results; this table never treats a mock provider as live integration.
 
-Latest build: **0.1.3**, **87 core tests passed**, lint **0 errors / 15 warnings**. The 0.1.2 model-loop comparison is in [the performance record](VERIFICATION-PERFORMANCE.md). Newer UI/shortcut results and artifact identity are in [the 0.1.3 UI record](VERIFICATION-UI.md).
+Latest APK: **0.1.5**, **89 core tests passed**, lint **0 errors / 15 warnings**, and **10 targeted Android 15 emulator tests passed** for this exact artifact. See [the bubble/voice/shortcut verification and APK identity](VERIFICATION-BUBBLE.md). The newer hosted API 30/35 matrix still has failures, detailed below; the local result is not a claim that all hosted tests pass.
 
 | Requirement | Implementation | Verification / remaining check |
 |---|---|---|
@@ -40,7 +40,7 @@ Latest build: **0.1.3**, **87 core tests passed**, lint **0 errors / 15 warnings
 | Reviewed app-specific memory/playbooks | Knowledge + LibraryPage + relevance loader | Inert-import tests; UI/model durable proposal review |
 | Optional MCP Streamable HTTP + per-tool consent | McpClient + Gateway + Settings | Session/version/changed-schema unit tests; **live external server acceptance external** |
 | Sanitized diagnostics preview | DataPage + payload-free Audit schema; debug-only read-only Activity status | Audit no-raw-arguments tests; protocol counters exclude payloads; actual Xiaomi status reads |
-| CI compilation/lint/unit/instrumentation | .github/workflows/android.yml | Local equivalent tasks; hosted CI not run because repository is not published |
+| CI compilation/lint/unit/instrumentation | .github/workflows/android.yml | Hosted build/core/lint/release checks pass. Latest hosted device matrix has 2 API 30 shortcut failures and 5 API 35 fixture/keyboard/voice failures; see [run 36932298773](https://github.com/fazakis/magicphone/actions/runs/36932298773). Live-account tests are intentionally skipped in CI |
 | Wrapper/dependencies/notices/checksums/signing | Wrapper checksums, verification metadata, release-check, notices | Wrapper official SHA check; debug signature/unsigned release and release audit |
 | Threat model, architecture, installation, contribution docs | docs/, README, CONTRIBUTING, SECURITY | Documentation source/code review |
 
