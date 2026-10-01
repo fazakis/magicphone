@@ -1,0 +1,27 @@
+# Privacy and destination inventory
+
+There are no ads, analytics, developer telemetry, remote commands, automatic crash uploads or hidden service endpoints. The application makes network requests only for explicitly selected inference/authentication or configured MCP work.
+
+| Destination | Data | When |
+|---|---|---|
+| `auth.openai.com` | OAuth parameters, authorization code/PKCE, refresh/revocation requests, identity-token validation key fetch | Continue with ChatGPT, renewal, logout |
+| `api.openai.com/v1` | Selected task/history, approved filtered screen context, user attachments, function tool definitions/results | Selected ChatGPT/OpenAI profile requests; model discovery |
+| User-configured compatible provider | Same selected inference context, bound API key if supplied | Explicit profile selection; no fallback to other providers |
+| User-configured MCP endpoint | Approved tool name/arguments and bound server token | Explicit catalog inspection / individually consented calls |
+| Android speech recognition provider | Microphone audio collected by the selected speech activity; may be processed on the provider’s servers | Only when the user taps the microphone; MagicPhone receives recognized text, never the recording |
+| Local Android Keystore + app files | Encrypted credentials, settings, sanitized history/notes/scripts and audit metadata | Local persistence |
+| User-selected export destination | Passphrase-encrypted content backup or previewed diagnostic text | Explicit Android document-picker export |
+
+Secondary models are chosen explicitly per task. No task is silently sent to them. Local/private endpoints need per-profile opt-in. HTTP is restricted to literal loopback `127.0.0.1`; external services require HTTPS and system-trusted TLS. Redirects are rejected. ChatGPT tokens are always bound to OpenAI and cannot be used with a configurable endpoint. Changing a profile/server destination clears its old credential.
+
+Screens are reduced to permitted-app, visible nodes with bounded labels, semantic capabilities, rectangles, and snapshot references. By default you select each permitted app. With **Allow all apps without asking** enabled, ordinary apps become eligible for task-driven observation and actions without individual selection or action approval; explicit Block rules still exclude apps. This expands what task context may be sent to your selected provider. Password fields trigger manual intervention. View IDs and hidden metadata are not sent. Capture is suppressed when app/window/focus or overlays are uncertain; screenshots are cropped to the app root bounds and kept in memory. Screenshot buffers are closed on success, failure and cancellation. Image attachments are bounded, decoded and re-encoded without source metadata and are not persisted.
+
+Sanitization runs before history serialization. Audit records never store raw tool arguments, screenshots or raw results. Recognized bearer/API tokens, labeled passwords/OTPs and payment-card-like long digit strings are redacted from retained prose. This cannot find arbitrary private information. Review exported content, avoid including secrets in tasks, and use short retention. Retention is 30 days by default and configurable from 1–365 days. Deletion removes content from the live encrypted archive; filesystem wear levelling and provider copies are outside the app's deletion guarantee.
+
+Android backup/device transfer is disabled. User backups deliberately exclude credentials, profiles, endpoints, app permissions, grants and server consents. AES-GCM authenticates the backup; PBKDF2-HMAC-SHA256 (600,000 iterations, random 16-byte salt) derives its key from a passphrase, with a random 12-byte IV. A lost passphrase cannot be recovered. Import is previewed and never enables scripts or trusts notes automatically.
+
+Screenshots and screen recordings of MagicPhone are allowed from version 0.1.5, as requested by the user. The app no longer sets FLAG_SECURE; visible conversation text and other displayed content can appear in captures and system previews. Password-style fields remain masked. This does not authorize model tools to inspect or control MagicPhone or system security screens, and does not change screenshot restrictions imposed by other apps.
+
+Voice input uses Android’s `ACTION_RECOGNIZE_SPEECH` activity result contract, with no task, history, credentials or screen contents included in the request. MagicPhone does not request microphone permission or record/store audio itself. The recognition provider handles microphone consent and may require network access. Returned text is an editable local draft and is not sent to the model until the user presses Send. Cancellation leaves the draft unchanged. A result for a different conversation is discarded. Dictation pauses an active task, and Resume remains explicit.
+
+When the agent waits for an answer, a temporary bubble can show a sanitized preview of its question over another app. It is hidden on screen off/lock and when the requesting chat is visible. Dismissing or tapping the bubble hides that instance without submitting an answer. The existing private-lock-screen notification retains the question and a chat-specific reply action. Questions are stored in the encrypted conversation, while the bubble itself is transient; no new network destination is introduced.

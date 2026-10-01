@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#f7f8f2"/>
+  <g transform="translate(70 55)"><rect width="45" height="45" rx="12" fill="#153d35"/><path transform="scale(.9375)" fill="#b8f3d1" d="M12 35V15L24 27 36 15v20h-5v-8l-7 7-7-7v8Z"/><path transform="scale(.9375)" fill="#f5bc79" d="m24 5 2 5 5 2-5 2-2 5-2-5-5-2 5-2Z"/></g>
+  <text x="130" y="86" font-family="Helvetica,Arial,sans-serif" font-size="30" font-weight="700" fill="#153d35">MagicPhone.</text>
+  <text x="70" y="240" font-family="Helvetica,Arial,sans-serif" font-size="100" font-weight="700" letter-spacing="-5" fill="#153d35">Your phone.</text>
+  <text x="70" y="350" font-family="Helvetica,Arial,sans-serif" font-size="100" font-weight="700" letter-spacing="-5" fill="#153d35">Your</text>
+  <text x="303" y="350" font-family="Georgia,serif" font-size="115" font-style="italic" letter-spacing="-5" fill="#153d35">say.</text>
+  <text x="73" y="421" font-family="Helvetica,Arial,sans-serif" font-size="25" fill="#5c6e64">An open-source AI assistant for your Android phone.</text>
+  <rect x="70" y="489" width="246" height="49" rx="25" fill="#153d35"/>
+  <text x="99" y="520" font-family="Helvetica,Arial,sans-serif" font-size="21" fill="#f7f8f2">magicphone.org</text>
+  <circle cx="927" cy="317" r="214" fill="#e7eede"/><circle cx="927" cy="317" r="244" fill="none" stroke="#d4dfc8"/>
+  <g transform="translate(812 115) rotate(8 110 200)">
+    <rect width="228" height="414" rx="35" fill="#153d35"/>
+    <rect x="7" y="7" width="214" height="400" rx="29" fill="#fbfcf7"/>
+    <circle cx="114" cy="25" r="4" fill="#153d35"/>
+    <text x="22" y="70" font-family="Helvetica,Arial,sans-serif" font-size="19" font-weight="700" fill="#153d35">MagicPhone</text>
+    <rect x="40" y="94" width="164" height="76" rx="13" fill="#e5eddc"/>
+    <text x="52" y="121" font-family="Helvetica,Arial,sans-serif" font-size="12" fill="#153d35">Open Maps and find</text><text x="52" y="143" font-family="Helvetica,Arial,sans-serif" font-size="12" fill="#153d35">coffee nearby.</text>
+    <text x="22" y="207" font-family="Helvetica,Arial,sans-serif" font-size="12" fill="#153d35">A few taps, taken care of.</text>
+    <rect x="22" y="225" width="182" height="95" rx="13" fill="#fff" stroke="#dce3d7"/>
+    <g fill="#589962"><circle cx="40" cy="247" r="5"/><circle cx="40" cy="273" r="5"/><circle cx="40" cy="299" r="5"/></g>
+    <g fill="#d2dec9"><rect x="56" y="242" width="80" height="9" rx="4"/><rect x="56" y="268" width="120" height="9" rx="4"/><rect x="56" y="294" width="96" height="9" rx="4"/></g>
+    <rect x="22" y="346" width="182" height="35" rx="17" fill="#fff" stroke="#dce3d7"/><text x="35" y="368" font-family="Helvetica,Arial,sans-serif" font-size="11" fill="#71806d">What’s next?</text>
+  </g>
+</svg>

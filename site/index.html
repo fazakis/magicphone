@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#153d35">
+  <meta name="description" content="Tell your phone what you want to do. MagicPhone is an open-source Android AI assistant that works across your apps, with voice input and controls in your hands.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="MagicPhone — Your phone. Your say.">
+  <meta property="og:description" content="Less tapping. More doing. An open-source AI assistant for your Android phone.">
+  <meta property="og:url" content="https://magicphone.org/">
+  <meta property="og:image" content="https://magicphone.org/assets/social-card.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://magicphone.org/">
+  <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+  <title>MagicPhone — Your phone. Your say.</title>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header wrap">
+    <a class="brand" href="./" aria-label="MagicPhone home"><img src="assets/mark.svg" width="36" height="36" alt=""><span>MagicPhone<span class="brand-dot">.</span></span></a>
+    <nav aria-label="Main navigation">
+      <a href="#how-it-works">How it works</a>
+      <a href="#your-control">Your control</a>
+      <a class="nav-source" href="https://github.com/fazakis/magicphone">GitHub <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+  <main id="main">
+    <section class="hero wrap" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="status-dot" aria-hidden="true"></span> OPEN SOURCE. MADE FOR ANDROID.</div>
+        <h1 id="hero-title">Your phone.<br>Your <span class="serif">say.</span><svg class="title-spark" viewBox="0 0 60 70" aria-hidden="true"><path d="M30 0 37 24 60 35 37 42 30 70 22 44 0 35 23 26Z"/></svg></h1>
+        <p class="hero-description">Say what you want to do.<br>Let your phone handle the taps.</p>
+        <p class="hero-detail">MagicPhone is an AI assistant that works across your Android apps. Give it a task, follow along, and take the lead whenever you want.</p>
+        <div class="hero-actions"><a class="button primary" href="#get-started">Meet your new assistant <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/fazakis/magicphone">Explore the code <span aria-hidden="true">↗</span></a></div>
+        <div class="hero-footnote"><span>Android 11+</span><i aria-hidden="true"></i><span>No root needed</span><i aria-hidden="true"></i><span>Early access</span></div>
+      </div>
+      <div class="hero-visual">
+        <div class="orbit orbit-one" aria-hidden="true"></div><div class="orbit orbit-two" aria-hidden="true"></div>
+        <div class="float-label voice-label"><span aria-hidden="true">▂ ▆ █ ▃ ▅</span> A little less tapping.</div>
+        <div class="phone" aria-label="Illustrated MagicPhone task example">
+          <div class="phone-status" aria-hidden="true"><span>9:41</span><span class="camera"></span><span>▰ ▰ ▰</span></div>
+          <div class="phone-header"><img src="assets/mark.svg" width="31" height="31" alt=""><div><strong>MagicPhone</strong><span>Your everyday assistant</span></div><span class="phone-menu" aria-hidden="true">···</span></div>
+          <div class="phone-chat" id="demo-chat" aria-live="polite" aria-atomic="true">
+            <div class="chat-day">LET’S MAKE THIS EASY</div>
+            <div class="user-message" id="demo-prompt">Open Maps and search for coffee nearby.</div>
+            <div class="assistant-message"><span class="assistant-mark" aria-hidden="true">✦</span><p id="demo-answer">On it. I’ll open Maps and look for nearby coffee spots.</p></div>
+            <div class="task-card"><div class="task-card-title"><span class="status-dot" aria-hidden="true"></span><span id="demo-state">A few taps, taken care of</span></div><ol id="demo-steps"><li><span aria-hidden="true">✓</span> Open Maps</li><li><span aria-hidden="true">✓</span> Search “coffee near me”</li><li><span aria-hidden="true">✓</span> Show the results</li></ol></div>
+            <div class="reply-preview" id="demo-result"><strong>You’re in the right place.</strong><span>Explore the results in Maps.</span></div>
+          </div>
+          <div class="phone-compose" aria-hidden="true"><span>What’s next?</span><span class="mic-symbol">♩</span><span class="send-symbol">↑</span></div>
+          <div class="phone-home" aria-hidden="true"></div>
+        </div>
+        <div class="float-label done-label"><span class="label-icon" aria-hidden="true">✓</span><div>Your apps.<br><strong>A helping hand.</strong></div></div>
+        <p class="demo-caption">An illustrated example. App behavior varies.</p>
+      </div>
+    </section>
+    <section class="example-strip" aria-label="Explore example tasks">
+      <div class="wrap examples"><span class="example-label">WHAT WOULD YOU SAY?</span><div class="example-options" role="group" aria-label="Choose an illustrated task"><button class="example-button" type="button" data-example="coffee" aria-pressed="true"><span aria-hidden="true">↗</span> Find a coffee spot</button><button class="example-button" type="button" data-example="settings" aria-pressed="false"><span aria-hidden="true">☼</span> Open display settings</button><button class="example-button" type="button" data-example="question" aria-pressed="false"><span aria-hidden="true">✦</span> Pick up the conversation</button></div></div>
+    </section>
+    <section class="section wrap" id="how-it-works" aria-labelledby="how-title">
+      <div class="section-heading"><p class="eyebrow">FROM WORDS TO ACTION</p><h2 id="how-title">A more natural way<br>to use your phone.</h2><p>You know what you want. MagicPhone helps with the steps in between.</p></div>
+      <div class="steps-grid">
+        <article class="step"><span class="step-number">01 /</span><h3>Tell it what you need.</h3><p>Type a task or tap the microphone to use Android voice input. Review your words, then send.</p><div class="mini-prompt"><span aria-hidden="true">✦</span> “Open my notes app.”</div></article>
+        <article class="step"><span class="step-number">02 /</span><h3>Let it find the way.</h3><p>MagicPhone reads the permitted screen and uses Android Accessibility to open apps, tap, scroll and enter text.</p><div class="mini-actions"><span>Open</span><span>Tap</span><span>Scroll</span><span>Type</span></div></article>
+        <article class="step"><span class="step-number">03 /</span><h3>Stay in the conversation.</h3><p>If it needs an answer, a message bubble brings you back to the right chat. Pause or stop from the notification.</p><div class="mini-question"><span class="question-dot" aria-hidden="true">?</span><div><strong>Which one did you mean?</strong><span>Tap to reply</span></div><span aria-hidden="true">↗</span></div></article>
+      </div>
+    </section>
+    <section class="control-section" id="your-control" aria-labelledby="control-title">
+      <div class="wrap control-grid">
+        <div class="control-copy"><p class="eyebrow">A HELPFUL ASSISTANT. YOUR DECISIONS.</p><h2 id="control-title">A little magic.<br>A lot of <span class="serif">control.</span></h2><p>Choose where MagicPhone can help and how much it can do. The controls stay in your hands.</p><a class="light-link" href="https://github.com/fazakis/magicphone/blob/main/docs/PRIVACY.md">Read the privacy details <span aria-hidden="true">↗</span></a></div>
+        <div class="control-features">
+          <article><span class="feature-icon" aria-hidden="true">◎</span><div><h3>Your apps, your boundaries.</h3><p>Select which apps it can read and use. Approve actions by default, or explicitly enable automatic access. Blocked apps stay blocked.</p></div></article>
+          <article><span class="feature-icon" aria-hidden="true">Ⅱ</span><div><h3>Always a way to take over.</h3><p>Pause, resume or stop from the task notification. Passwords, permission prompts and payment authorization stay with you.</p></div></article>
+          <article><span class="feature-icon" aria-hidden="true">⌁</span><div><h3>Your choice of model.</h3><p>Connect an eligible ChatGPT account or configure an API or compatible provider. Selected task and screen context goes to that provider.</p></div></article>
+          <article><span class="feature-icon" aria-hidden="true">↗</span><div><h3>Open to the last line.</h3><p>No ads or developer analytics. Inspect the code, build it yourself, and make it yours under MIT or Apache-2.0.</p></div></article>
+        </div>
+      </div>
+    </section>
+    <section class="section wrap details-section" aria-labelledby="details-title">
+      <div class="section-heading"><p class="eyebrow">MADE FOR EVERYDAY ANDROID</p><h2 id="details-title">Fits into the way you use your phone.</h2></div>
+      <div class="details-grid"><article><span class="detail-glyph" aria-hidden="true">Aa</span><h3>Speak your language.</h3><p>English and Greek interfaces, Unicode text, and voice input through your Android speech provider.</p></article><article><span class="detail-glyph" aria-hidden="true">↩</span><h3>Keep the thread.</h3><p>Encrypted chat history, editable drafts and follow-up tasks. Return through the Accessibility shortcut or a reply bubble.</p></article><article><span class="detail-glyph" aria-hidden="true">⌘</span><h3>Make it your own.</h3><p>Build reusable scripts and app-specific playbooks. Connect optional MCP tools when you need them.</p></article></div>
+    </section>
+    <section class="get-started wrap" id="get-started" aria-labelledby="start-title">
+      <div><p class="eyebrow">SMALL APP. BIG POSSIBILITIES.</p><h2 id="start-title">Give your phone<br>a helping hand.</h2><p>MagicPhone is in early development. Get the source, build the Android app, and help shape what comes next.</p><div class="hero-actions"><a class="button primary" href="https://github.com/fazakis/magicphone#build">Get started on GitHub <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/fazakis/magicphone/issues">Share an idea <span aria-hidden="true">↗</span></a></div><p class="install-note">Android 11+ · No root · No computer needed after installation</p></div>
+      <ol class="setup-list"><li><span>1</span><div><h3>Build &amp; install</h3><p>Follow the repository’s build instructions to install your APK.</p></div></li><li><span>2</span><div><h3>Choose your setup</h3><p>Enable Accessibility manually, choose app access, and connect your model provider.</p></div></li><li><span>3</span><div><h3>Start with something simple</h3><p>Open an app, try a task, or explore the included account-free practice mode.</p></div></li></ol>
+    </section>
+    <section class="section wrap faq-section" aria-labelledby="faq-title">
+      <div><p class="eyebrow">A FEW GOOD QUESTIONS</p><h2 id="faq-title">Before you<br>say hello.</h2></div>
+      <div class="faq-list">
+        <details><summary>Does my phone need to be rooted?<span aria-hidden="true">+</span></summary><p>No. MagicPhone uses Android’s Accessibility APIs on an ordinary Android 11 or newer phone. Enable access yourself in Android settings. You don’t need ADB or a connected computer for everyday use.</p></details>
+        <details><summary>Can I use my ChatGPT account?<span aria-hidden="true">+</span></summary><p>MagicPhone includes Continue with ChatGPT for eligible accounts. Model availability and usage limits depend on your account and provider. Separate API-key and compatible-provider profiles are also supported.</p></details>
+        <details><summary>Does it work entirely offline?<span aria-hidden="true">+</span></summary><p>Cloud models receive selected task history and permitted screen context. Local or self-hosted compatible providers can be configured separately. The included practice mode makes no model requests. Android voice input may use your speech provider’s servers.</p></details>
+        <details><summary>Will it work with every app?<span aria-hidden="true">+</span></summary><p>App layouts, Accessibility support and Android restrictions vary. MagicPhone is an early project and cannot guarantee every task. Secure screens and system permissions may need manual input. You can see the current coverage and limitations in the <a href="https://github.com/fazakis/magicphone/blob/main/docs/FEATURE_MATRIX.md">feature matrix</a>.</p></details>
+        <details><summary>What’s the license?<span aria-hidden="true">+</span></summary><p>Original MagicPhone code, design and artwork are available under your choice of the <a href="https://github.com/fazakis/magicphone/blob/main/LICENSE">MIT License</a> or <a href="https://github.com/fazakis/magicphone/blob/main/LICENSE-APACHE">Apache License 2.0</a>. Copyright 2026 Nikos Fazakis. Third-party dependencies retain their own licenses.</p></details>
+      </div>
+    </section>
+  </main>
+  <footer class="wrap site-footer"><div><a class="brand" href="./"><img src="assets/mark.svg" width="29" height="29" alt=""><span>MagicPhone<span class="brand-dot">.</span></span></a><p>Made by Nikos Fazakis. Built in the open.</p></div><div class="footer-links"><a href="https://github.com/fazakis/magicphone">GitHub ↗</a><a href="https://github.com/fazakis/magicphone/blob/main/docs/PRIVACY.md">Privacy</a><a href="https://github.com/fazakis/magicphone/blob/main/LICENSE">License</a><a href="https://github.com/fazakis/magicphone/blob/main/SECURITY.md">Security</a></div><p class="footer-note">© 2026 Nikos Fazakis. Independent project; not affiliated with OpenAI or Google. This site uses no analytics or cookies. Hosting is provided by GitHub Pages.</p></footer>
+</body>
+</html>

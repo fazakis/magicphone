@@ -1,0 +1,12 @@
+MagicPhone
+Copyright 2026 Nikos Fazakis
+
+Original MagicPhone source, design and artwork are available under your choice
+of the MIT License (LICENSE) or Apache License 2.0 (LICENSE-APACHE).
+SPDX-License-Identifier: MIT OR Apache-2.0
+Functional inspiration: Fox-Islam/android-agent (https://github.com/Fox-Islam/android-agent).
+MagicPhone is independently implemented. No reference implementation code, assets,
+or documentation were copied. There is no affiliation or endorsement.
+
+OpenAI, ChatGPT, Android, Kotlin and other third-party names belong to their respective owners.
+See THIRD_PARTY_NOTICES.md for dependency notices.

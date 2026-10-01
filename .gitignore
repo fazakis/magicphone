@@ -1,0 +1,12 @@
+INSTRUCTIONS.md
+.gradle/
+.kotlin/
+**/build/
+local.properties
+.idea/
+*.iml
+*.jks
+*.keystore
+.env
+.DS_Store
+artifacts/
