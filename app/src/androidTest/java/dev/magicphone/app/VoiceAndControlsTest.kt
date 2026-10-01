@@ -78,7 +78,7 @@ class VoiceAndControlsTest {
         val component = "${context.packageName}/${context.packageName}.PhoneService"
         val enabled = device.executeShellCommand("settings get secure enabled_accessibility_services").trim().split(":")
         Assert.assertTrue("Service must already be enabled", component in enabled)
-        shortcuts = listOf("accessibility_button_targets", "accessibility_button_mode")
+        shortcuts = listOf("accessibility_button_targets", "accessibility_button_mode", "accessibility_button_target_component")
             .associateWith { device.executeShellCommand("settings get secure $it").trim() }
         original = r.archive.value
         conversation = r.current.value
@@ -94,7 +94,8 @@ class VoiceAndControlsTest {
         }
         await("Service connected") { r.phone != null }
         device.executeShellCommand("settings put secure accessibility_button_targets $component")
-        device.executeShellCommand("settings put secure accessibility_button_mode 1")
+        device.executeShellCommand("settings put secure accessibility_button_mode ${if (android.os.Build.VERSION.SDK_INT >= 31) 1 else 0}")
+        device.executeShellCommand("settings put secure accessibility_button_target_component $component")
     }
 
     @After fun restore() {
@@ -149,10 +150,18 @@ class VoiceAndControlsTest {
     }
 
     @Test fun installedAndroidRecognizerOpensAndCanBeCanceled() {
+        // Stock CI images may have no speech activity. Resolve the installed provider
+        // through the test shell instead of assuming the manually provisioned QA package.
+        val component = device.executeShellCommand(
+            "cmd package resolve-activity --brief -a android.speech.action.RECOGNIZE_SPEECH")
+            .lineSequence().map { it.trim() }.lastOrNull { it.matches(Regex("[A-Za-z0-9_.]+/[A-Za-z0-9_.$]+")) }
+        val providerPackage = component?.substringBefore('/')
+        Assume.assumeTrue("No installed Android speech recognition activity on this image",
+            providerPackage != null && providerPackage != "android")
         input().text = "Keep this unsent draft"
         mic()
         Assert.assertTrue("Installed Android speech provider opened",
-            device.wait(Until.hasObject(By.pkg("com.google.android.tts")), 10000))
+            device.wait(Until.hasObject(By.pkg(providerPackage!!)), 10000))
         repeat(3) {
             if (input() == null) { device.pressBack(); device.waitForIdle(3000) }
         }
@@ -177,7 +186,14 @@ class VoiceAndControlsTest {
         awaitAction(R.string.resume)
         tapNotificationAction(R.string.resume)
         await("Resumed from shade") { r.agent.state.value == RunState.PLANNING }
-        await("Resume closes notification shade") { device.hasObject(By.pkg("dev.magicphone.fixture")) }
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            await("Resume closes notification shade") { device.hasObject(By.pkg("dev.magicphone.fixture")) }
+        } else {
+            // Android 11 has no GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE. A user closes
+            // the shade manually; Pause/Resume/Stop state assertions still run below.
+            device.pressBack()
+            await("Fixture visible after closing shade") { device.hasObject(By.pkg("dev.magicphone.fixture")) }
+        }
         awaitAction(R.string.stop)
         tapNotificationAction(R.string.stop)
         await("Stopped from shade") { r.agent.state.value == RunState.STOPPED }
@@ -193,7 +209,9 @@ class VoiceAndControlsTest {
         awaitAction(R.string.pause)
         repeat(3) {
             device.pressHome()
-            val shortcut = device.wait(Until.findObject(By.res("com.android.systemui", "accessibility_floating_menu")), 10000)
+            val shortcut = device.wait(Until.findObject(By.res("com.android.systemui", "accessibility_button")),
+                if (android.os.Build.VERSION.SDK_INT < 31) 10000 else 500)
+                ?: device.wait(Until.findObject(By.res("com.android.systemui", "accessibility_floating_menu")), 10000)
                 ?: device.wait(Until.findObject(By.desc("MagicPhone").pkg("com.android.systemui")), 5000)
             Assert.assertNotNull("System accessibility button", shortcut)
             shortcut.click()

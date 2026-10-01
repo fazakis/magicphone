@@ -132,7 +132,7 @@ class UiResponsivenessTest {
         val enabled = device.executeShellCommand("settings get secure enabled_accessibility_services").trim().split(':')
         Assert.assertTrue(component in enabled)
         Assert.assertTrue(enabled.all { it.matches(Regex("[A-Za-z0-9_./]+")) })
-        val keys = listOf("accessibility_button_targets", "accessibility_button_mode")
+        val keys = listOf("accessibility_button_targets", "accessibility_button_mode", "accessibility_button_target_component")
         val previous = keys.associateWith { device.executeShellCommand("settings get secure $it").trim() }
         try {
             main { r.newConversation() }
@@ -144,7 +144,8 @@ class UiResponsivenessTest {
             device.executeShellCommand("settings put secure accessibility_enabled 1")
             await { r.connected.value }
             device.executeShellCommand("settings put secure accessibility_button_targets $component")
-            device.executeShellCommand("settings put secure accessibility_button_mode 1")
+            device.executeShellCommand("settings put secure accessibility_button_mode ${if (android.os.Build.VERSION.SDK_INT >= 31) 1 else 0}")
+            device.executeShellCommand("settings put secure accessibility_button_target_component $component")
             val field = device.wait(Until.findObject(By.clazz("android.widget.EditText")), 10000)
             field.click()
             field.text = "Keep this draft"
@@ -159,11 +160,13 @@ class UiResponsivenessTest {
                     Assert.assertTrue(device.wait(Until.hasObject(By.pkg("dev.magicphone.fixture")), 5000))
                 }
                 device.waitForIdle(5000)
-                val shortcut = device.wait(Until.findObject(By.res("com.android.systemui", "accessibility_floating_menu")), 10000)
+                val shortcut = device.wait(Until.findObject(By.res("com.android.systemui", "accessibility_button")),
+                    if (android.os.Build.VERSION.SDK_INT < 31) 10000 else 500)
+                    ?: device.wait(Until.findObject(By.res("com.android.systemui", "accessibility_floating_menu")), 10000)
                     ?: device.wait(Until.findObject(By.descContains("MagicPhone").pkg("com.android.systemui")), 3000)
                 Assert.assertNotNull("Android accessibility shortcut is visible", shortcut)
                 val namedButton = device.findObject(By.descContains("MagicPhone").pkg("com.android.systemui"))
-                val button = namedButton ?: shortcut
+                val button = if (android.os.Build.VERSION.SDK_INT < 31) shortcut else namedButton ?: shortcut
                 println("Shortcut fixture target: resource=${button.resourceName}; bounds=${button.visibleBounds}; children=${button.childCount}; named=${namedButton != null}")
                 button.click()
                 val input = device.wait(Until.findObject(By.clazz("android.widget.EditText").pkg(context.packageName)), 10000)

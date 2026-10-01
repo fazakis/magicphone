@@ -71,3 +71,5 @@ These are recorded verification limits, not hidden placeholder implementations. 
 ## Website and MIT option
 
 Added an MIT licensing option while retaining Apache-2.0, copyright attribution and third-party notices. The original-source SPDX identifiers, README and contributing guidance consistently use `MIT OR Apache-2.0`. Added the static `site/` landing page, interactive task illustrations, setup and privacy copy, FAQ, original social artwork, and pinned GitHub Pages workflow. The user authorized publication using their GitHub CLI; see [website deployment](WEBSITE.md) for the latest public URLs, checks and DNS status. Website changes do not alter Android behavior or the 0.1.5 version.
+
+Publication CI found Android-version and installed-provider assumptions in the UI harness. Updated the test setup for Android 11 navigation shortcuts and manual notification-shade closure; native speech availability is discovered rather than tied to the QA image's Google package. Added API 35 alongside API 30 to CI. Build/lint/core/release checks passed on the first public run; final matrix results are recorded in the website verification notes.
