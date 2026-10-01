@@ -46,3 +46,13 @@ Source: [GitHub's custom domain documentation](https://docs.github.com/en/pages/
 - Update social metadata and `sitemap.xml` if the public domain changes.
 
 This website change does not change the Android app version or runtime behavior.
+
+## Executed verification (2026-10-02)
+
+- Published the repository at https://github.com/fazakis/magicphone; the default branch is `main`. GitHub recognizes the primary MIT license; Apache-2.0 remains an explicit alternative in LICENSE-APACHE and original-source SPDX headers.
+- [First Pages deployment](https://github.com/fazakis/magicphone/actions/runs/36931116016) passed. Only the static site was uploaded.
+- Visually inspected desktop, tablet (768 px) and narrow phone (320/390 px) layouts. Checked horizontal overflow, all three example interactions, FAQ expansion and local asset/anchor integrity. No browser console errors or missing images were found.
+- Fetched the published HTML and CSS from GitHub Pages using the custom hostname with a direct DNS override; their SHA-256 values matched the local files. This verifies the deployed content without claiming that public DNS is configured.
+- The Pages custom domain is registered as `magicphone.org`. At the time of verification, Cloudflare had no apex A records or www CNAME; public domain resolution and certificate provisioning remain pending. Apply the records above, then enable HTTPS after GitHub makes it available.
+- The Android app remains at 0.1.5. Source changes in this task are licensing headers, documentation and publishing configuration; Android runtime behavior is unchanged. The first repository push also starts the existing Android verification workflow.
+- `INSTRUCTIONS.md`, local build settings, APKs, keys and `artifacts/` are excluded from Git. Original private build-host addresses were removed from the public developer helper and verification records.
