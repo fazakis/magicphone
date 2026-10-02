@@ -215,6 +215,8 @@ class VoiceAndControlsTest {
                 ?: device.wait(Until.findObject(By.desc("MagicPhone").pkg("com.android.systemui")), 5000)
             Assert.assertNotNull("System accessibility button", shortcut)
             shortcut.click()
+            Assert.assertTrue(device.wait(Until.hasObject(By.text(context.getString(R.string.quick_prompt_title))), 10000))
+            device.findObject(By.text(context.getString(R.string.task_result_open))).click()
             await("Current draft focused from background") { input()?.text == "Keep my correction" && input()?.isFocused == true }
             Assert.assertTrue("Keyboard visible", device.wait(Until.hasObject(By.pkg("com.google.android.inputmethod.latin")), 5000))
             Assert.assertEquals(RunState.PAUSED, r.agent.state.value)

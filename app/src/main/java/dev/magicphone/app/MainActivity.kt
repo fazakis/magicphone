@@ -243,6 +243,7 @@ fun Field(value: String, label: Int, change: (String) -> Unit, secret: Boolean =
 
 fun errorResource(code: String): Int =
     when {
+        code == "screen_context_changed" -> R.string.screen_context_changed
         code == "unsupported_model_setting" -> R.string.unsupported_model_setting
         code == "voice_unavailable" -> R.string.voice_unavailable
         code == "voice_empty" -> R.string.voice_empty
@@ -347,6 +348,7 @@ fun AppUi(r: AppRuntime, focusRequest: Long, shared: String, uri: Uri?, consumed
                     fontWeight = FontWeight.Bold,
                 )
                 Text(s(R.string.onboarding_body), style = MaterialTheme.typography.bodyLarge)
+                AutomationDisclaimer()
                 Button(
                     {
                         r.saveSettings(settings.copy(onboarded = true))
@@ -512,6 +514,7 @@ fun TaskPage(
                         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (msg.role != "user") Text("MagicPhone", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                             SelectionContainer { Text(msg.text, style = MaterialTheme.typography.bodyLarge) }
+                            if (msg.role == "assistant" && msg.text.isNotBlank()) ReadAloudButton(r, msg.id, msg.text)
                         }
                     }
                     TextButton({ r.branch(conversation!!.id, msg.id) }, contentPadding = PaddingValues(horizontal = 8.dp)) {

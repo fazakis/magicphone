@@ -168,9 +168,15 @@ class UiResponsivenessTest {
                 val namedButton = device.findObject(By.descContains("MagicPhone").pkg("com.android.systemui"))
                 val button = if (android.os.Build.VERSION.SDK_INT < 31) shortcut else namedButton ?: shortcut
                 println("Shortcut fixture target: resource=${button.resourceName}; bounds=${button.visibleBounds}; children=${button.childCount}; named=${namedButton != null}")
+                val clicksBefore = r.phone!!.shortcutClicks
                 button.click()
+                if (index == 1) {
+                    Assert.assertTrue(device.wait(Until.hasObject(By.text(context.getString(R.string.quick_prompt_title))), 10000))
+                    device.findObject(By.text(context.getString(R.string.task_result_open))).click()
+                }
                 val input = device.wait(Until.findObject(By.clazz("android.widget.EditText").pkg(context.packageName)), 10000)
-                Assert.assertNotNull("Shortcut chat input; foreground=${device.currentPackageName}; connected=${r.connected.value}", input)
+                if (input == null) device.takeScreenshot(java.io.File(context.getExternalFilesDir(null), "shortcut-failure.png"))
+                Assert.assertNotNull("Shortcut chat input; index=$index; clicks=$clicksBefore/${r.phone!!.shortcutClicks}; overlay=${r.phone!!.quickPrompt.view != null}; foreground=${device.currentPackageName}; connected=${r.connected.value}", input)
                 Assert.assertEquals("Keep this draft", input.text)
                 await { device.findObject(By.clazz("android.widget.EditText").pkg(context.packageName))?.isFocused == true }
                 Assert.assertTrue("Full onscreen keyboard is visible", device.wait(Until.hasObject(By.pkg("com.google.android.inputmethod.latin")), 5000))

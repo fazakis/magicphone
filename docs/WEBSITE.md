@@ -16,11 +16,12 @@ Open `http://127.0.0.1:8765`. The three screenshot selectors show the actual hom
 
 The website is published at [magicphone.org](https://magicphone.org/). The canonical URL, sitemap and Open Graph metadata use that address.
 
-The call to action links to the 0.2.1 early-access GitHub Release, with source/build instructions still available. The release identifies the installable APK as debug signed. APKs are separate GitHub Release assets; the website workflow only publishes static site files.
+The call to action links to the 0.2.2 early-access GitHub Release, with source/build instructions still available. The release identifies the installable APK as debug signed. APKs are separate GitHub Release assets; the website workflow only publishes static site files.
 
 ## Content updates
 
 - Edit `index.html` for copy, links, FAQs and metadata.
+- Keep `disclaimer.html` consistent with the README notice and app onboarding/access copy.
 - Edit `styles.css` for presentation and breakpoints.
 - Edit `script.js` for screenshot selection and accessible captions. Use authentic app captures in `site/assets/app-*.png`; do not imply that a selected processing speed was confirmed by the server.
 - Keep provider/permission/privacy claims consistent with the Android implementation and `docs/PRIVACY.md`.
@@ -49,3 +50,7 @@ The follow-up [hosted matrix run](https://github.com/fazakis/magicphone/actions/
 The user requested previews closer to the real app. The hero now displays authentic, unaltered app screenshots, replacing the earlier HTML conversation illustration. Three selectors show Home, model/thinking settings and a completed practice task; the image links to its full-size original. The settings and result captions distinguish requested processing speed from actual server-reported speed. The phone frame preserves the screenshots' full aspect ratio, and decorative labels no longer cover app controls.
 
 Browser verification covered 1280 px desktop, 768 px tablet and 390/320 px phone widths, screenshot switching (including keyboard activation), selected state, full-size image destinations, FAQ expansion, image loading, local asset/anchor integrity and JavaScript syntax. No horizontal page overflow or browser warning/error was observed. The final 320 px check confirmed the whole phone fits and the caption does not overlap it. Preview captures are in ignored `artifacts/github-release-0.2.1/`. The release download points to v0.2.1.
+
+## 0.2.2 disclaimer and release links (2026-10-02)
+
+The install/download links now target v0.2.2. The new `disclaimer.html` carries the approved open-source automation notice, linked from the footer and install section and included in the sitemap. Desktop and 320 px phone checks confirm readable layout, no horizontal overflow, valid Home/license links and working homepage-to-disclaimer navigation. The initial narrow-header overlap was fixed. Existing authentic app screenshots remain unchanged. No DNS operational details or personal marketing bylines were reintroduced.

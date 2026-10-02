@@ -23,6 +23,7 @@ data class Settings(
     // Decode existing installations without re-enabling the retired overlay controls.
     val floating: Boolean = false,
     val secondary: String = "",
+    val showTaskResultBubbles: Boolean = true,
 )
 
 class MagicApp : Application() {
@@ -38,7 +39,10 @@ class MagicApp : Application() {
 val android.content.Context.runtime
     get() = (applicationContext as MagicApp).runtime
 
-data class InputRequest(val conversation: String, val message: String, val id: String = id())
+enum class BubbleKind { QUESTION, COMPLETED, FAILED }
+
+data class InputRequest(val conversation: String, val message: String, val id: String = id(),
+    val kind: BubbleKind = BubbleKind.QUESTION)
 
 class AppRuntime(val app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -49,6 +53,8 @@ class AppRuntime(val app: Application) {
     val current = MutableStateFlow<String?>(archive.value.conversations.maxByOrNull { it.updated }?.id)
     val visibleChat = MutableStateFlow<String?>(null)
     val inputRequest = MutableStateFlow<InputRequest?>(null)
+    val resultRequest = MutableStateFlow<InputRequest?>(null)
+    val speech by lazy { SpeechPlayback(app) }
     private val historyWriter = SnapshotWriter<Archive>(scope, failed = {
         scope.launch { stop(); notice.value = "storage_recovery" }
     }) { value ->
@@ -175,11 +181,17 @@ class AppRuntime(val app: Application) {
         Agent(
             gateway,
             { text, state ->
-                withContext(Dispatchers.Main.immediate) {
+                val conversation = withContext(Dispatchers.Main.immediate) {
                     addMessage("assistant", text)
                     setState(state)
+                    current.value
                 }
                 historyWriter.flush()
+                withContext(Dispatchers.Main.immediate) {
+                    if (current.value == conversation && agent.state.value == state) {
+                        publishResult(state, text)
+                    }
+                }
             },
             { pkg ->
                 archive.value.knowledge
@@ -191,6 +203,9 @@ class AppRuntime(val app: Application) {
     init {
         scope.launch {
             agent.state.collect {
+                if (it !in setOf(RunState.COMPLETED, RunState.FAILED)) resultRequest.value = null
+                // Timeout failures do not pass through the final-message persistence callback.
+                if (it == RunState.FAILED) publishResult(it, agent.error.value)
                 if (
                     it in
                         setOf(
@@ -215,9 +230,23 @@ class AppRuntime(val app: Application) {
             }
         }
         scope.launch {
-            combine(agent.state, inputRequest, visibleChat) { _, _, _ -> Unit }
+            combine(agent.state, inputRequest, resultRequest, visibleChat,
+                settings.map { it.showTaskResultBubbles }.distinctUntilChanged()) { _, _, _, _, _ -> Unit }
                 .collect { phone?.updateControls() }
         }
+    }
+
+    private fun publishResult(state: RunState, text: String) {
+        if (state !in setOf(RunState.COMPLETED, RunState.FAILED) || !settings.value.showTaskResultBubbles) return
+        val conversation = current.value ?: return
+        if (archive.value.conversations.none { it.id == conversation }) return
+        val kind = if (state == RunState.COMPLETED) BubbleKind.COMPLETED else BubbleKind.FAILED
+        val message = if (kind == BubbleKind.FAILED) app.getString(errorResource(agent.error.value.ifBlank { text }))
+            else if (text.isBlank() || text == "script_completed") app.getString(R.string.task_result_completed_body)
+            else Sanitizer.text(text).take(8000)
+        val previous = resultRequest.value
+        if (previous?.conversation == conversation && previous.kind == kind && previous.message == message) return
+        resultRequest.value = InputRequest(conversation, message, kind = kind)
     }
 
     private fun loadSettings(): Settings =
@@ -256,6 +285,7 @@ class AppRuntime(val app: Application) {
         }
         vault.write("settings", JsonCodec.encodeToString(Settings.serializer(), normalized))
         settings.value = normalized
+        if (!normalized.showTaskResultBubbles) resultRequest.value = null
     }
 
     fun setAllowAllApps(enabled: Boolean) {
@@ -284,6 +314,9 @@ class AppRuntime(val app: Application) {
     }
 
     fun stop() {
+        phone?.quickPrompt?.cancel()
+        speech.stop()
+        resultRequest.value = null
         catalogEpoch++
         catalogJob?.cancel()
         localApproval(false)
@@ -294,7 +327,7 @@ class AppRuntime(val app: Application) {
 
     fun pauseForChat() {
         // WAITING_USER already suspends execution until Send. Do not add a second Resume step.
-        if (agent.state.value != RunState.WAITING_USER) agent.pause()
+        if (agent.state.value in setOf(RunState.PLANNING, RunState.ACTING, RunState.WAITING_APPROVAL)) agent.pause()
     }
 
     fun launchable(): List<Pair<String, String>> =
@@ -565,7 +598,7 @@ class AppRuntime(val app: Application) {
         saveSettings(settings.value.copy(profiles = settings.value.profiles.map { if (it.id == profile.id) updated else it }))
     }
 
-    fun start(text: String, images: List<String> = emptyList(), secondary: Boolean = false) {
+    fun start(text: String, images: List<String> = emptyList(), secondary: Boolean = false, screenContext: String = "") {
         if (text.isBlank()) return
         if (
             agent.state.value in
@@ -605,7 +638,7 @@ class AppRuntime(val app: Application) {
                 )
         stop()
         addMessage("user", text)
-        agent.start(scope, provider(p), text, history, images, optimize = p.kind != ProviderKind.MOCK)
+        agent.start(scope, provider(p), text, history, images, optimize = p.kind != ProviderKind.MOCK, screenContext = screenContext)
     }
 
     fun runScript(script: Script, values: Map<String, String>) {

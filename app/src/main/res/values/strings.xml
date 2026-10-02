@@ -129,7 +129,7 @@
     <string name="voice_unavailable">Voice input is unavailable. Enable a speech recognition app in Android settings, or use your keyboard microphone.</string>
     <string name="voice_chat_changed">The conversation changed while listening. Please dictate again in this chat.</string>
     <string name="voice_empty">No speech was recognized. Please try again.</string>
-    <string name="voice_help">Tap the microphone in the message field to dictate with your Android speech provider. It may process audio online. MagicPhone receives only text; no OpenAI API key is needed. Review the draft before sending. Opening chat from the shortcut pauses a running task until you tap Resume.</string>
+    <string name="voice_help">Tap the microphone in the message field to dictate with your Android speech provider. It may process audio online. Review the draft before sending. Read aloud below a response or in its bubble uses your Android text-to-speech engine, which may also work online. Tap Stop reading to end playback.</string>
     <string name="notification_help">Pause, Resume and Stop are in an ongoing notification while Accessibility is connected. Tap the notification to open the current chat. Android may let you dismiss it; opening MagicPhone restores it. Enable notifications to keep these controls available outside the app.</string>
     <string name="input_bubble_title">MagicPhone needs your reply</string>
     <string name="input_bubble_reply">Tap to reply</string>
@@ -188,4 +188,21 @@
     <string name="reported_speed">Reported speed: %1$s</string>
     <string name="not_reported">Not reported</string>
     <string name="speed_not_confirmed">The response did not confirm the requested speed.</string>
+    <string name="automation_disclaimer_title">You control what MagicPhone can do.</string>
+    <string name="automation_disclaimer_body">MagicPhone is an open-source automation tool provided without warranties, to the extent permitted by law. AI-generated instructions and automated actions can be wrong and may cause loss or damage. The authors and contributors disclaim liability where legally permitted. You are responsible for your requests, permissions, and automation settings. Review important actions and supervise tasks, especially when automatic access is enabled.</string>
+    <string name="read_disclaimer">Read the full disclaimer</string>
+    <string name="task_result_bubbles">Show completion and error bubbles</string>
+    <string name="task_result_bubbles_help">Show a floating message when a task completes or stops with a final error. Tap it to return to that chat. Questions that need your answer still show their own bubbles.</string>
+    <string name="task_result_completed_title">Actions completed</string>
+    <string name="task_result_completed_body">The task has finished. Open the chat to review the result.</string>
+    <string name="task_result_failed_title">Task stopped with an error</string>
+    <string name="task_result_open">Open chat</string>
+    <string name="quick_prompt_title">Ask MagicPhone</string>
+    <string name="quick_prompt_hint">What should I do on this screen?</string>
+    <string name="quick_prompt_context">Uses the current app after Send. Your existing app permissions apply.</string>
+    <string name="screen_context_changed">The current app changed or is not allowed. Open the screen you want and check its Read permission, then try again.</string>
+    <string name="read_aloud">Read aloud</string>
+    <string name="stop_reading">Stop reading</string>
+    <string name="tts_unavailable">Text-to-speech is unavailable. Check your Android speech engine in system settings.</string>
+    <string name="tts_language_missing">This voice is not installed. Download it in Android text-to-speech settings.</string>
 </resources>

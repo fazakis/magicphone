@@ -8,13 +8,27 @@ The application contains a Compose/Material 3 UI in English and Greek, an actual
 
 This is an early implementation, not a claim of universal third-party-app safety. Read the [feature/verification matrix](docs/FEATURE_MATRIX.md) and [remaining acceptance checks](docs/ACCEPTANCE.md). Live ChatGPT operation has been verified on a dedicated Android 15 emulator with account-owner consent; eligibility and behavior on other accounts/devices can vary.
 
+## Open-source software and AI automation disclaimer
+
+MagicPhone is an open-source automation tool, available under the MIT or Apache-2.0 license. It connects to AI models and services selected by the user and can execute instructions on the user’s device through the permissions and automation settings the user enables.
+
+AI models can produce incorrect, unexpected, or harmful instructions. Software errors and changes in other applications can also cause unintended behavior. MagicPhone does not guarantee that model responses or automated actions will be accurate, safe, reliable, or suitable for a particular purpose.
+
+You are responsible for the tasks you request, the services you connect, the permissions you grant, and the automation you enable. Review important actions, supervise automated tasks, protect sensitive information, and maintain appropriate backups. Enabling automatic access allows actions to proceed without individual approval.
+
+MagicPhone is supplied “as is,” with no warranties, to the extent permitted by applicable law. Its authors, maintainers, contributors, and distributors disclaim liability, to the extent legally permitted, for losses or damage connected with the software, AI-generated instructions, or actions executed through it. These may include data loss, unintended changes or communications, account restrictions, financial loss, and service disruption.
+
+Third-party models and services are subject to their providers’ own terms. This notice supplements the applicable open-source license and does not exclude any rights or responsibilities that cannot legally be excluded.
+
+Read the [website disclaimer](https://magicphone.org/disclaimer.html), [MIT License](LICENSE), and [Apache-2.0 license](LICENSE-APACHE).
+
 ## Website
 
 The landing page lives in [`site/`](site/) in this repository and deploys independently with GitHub Pages. The custom domain is [magicphone.org](https://magicphone.org). See [website development](docs/WEBSITE.md).
 
 ## Build
 
-The installable **0.2.1 early-access APK** is available in [GitHub Releases](https://github.com/fazakis/magicphone/releases/tag/v0.2.1). Download `magicphone-0.2.1-debug.apk` for Android 11+. This is the verified development build, signed with the same Android debug certificate as the preceding QA updates; it is not production signed. The release includes checksums, signing identity, license notices and current verification limits. Install over a matching-signer build to preserve app data.
+The installable **0.2.2 early-access APK** is available in [GitHub Releases](https://github.com/fazakis/magicphone/releases/tag/v0.2.2). Download `magicphone-0.2.2-debug.apk` for Android 11+. This is the verified development build, signed with the same Android debug certificate as the preceding QA updates; it is not production signed. The release includes checksums, signing identity, license notices and current verification limits. Install over a matching-signer build to preserve app data.
 
 Prerequisites: JDK 21, Android SDK **platform 37.0**, build-tools 36.0.0, and network access for pinned build dependencies. Set `ANDROID_HOME` or create the ignored `local.properties` with `sdk.dir=...`. `targetSdk=36`, `minSdk=30`; current Compose needs `compileSdk=37`.
 
@@ -40,7 +54,7 @@ Application ID defaults to `dev.magicphone.app`. Override it with `-Pmagicphone.
 
 1. Copy the debug APK onto an Android 11+ phone and open it. Grant the installer permission manually when Android asks. Production users should install a release signed by a trusted distributor.
 2. Read onboarding. In Settings, open Android Accessibility settings and manually enable MagicPhone. Android may require **Allow restricted settings** in App info for a sideloaded app. The agent cannot approve this itself.
-3. Enable notification controls. Pause/Resume and Stop live in an ongoing notification while Accessibility is connected; the old floating bar is removed, including on upgrades. Tap the notification or Android Accessibility shortcut to open the current chat and keyboard. A running task pauses so it cannot take the screen back; tap Resume to continue. Android 14+ can allow dismissing an ongoing notification; opening MagicPhone restores it.
+3. Enable notification controls. Pause/Resume and Stop live in an ongoing notification while Accessibility is connected; the old floating bar is removed, including on upgrades. Tap the notification to open the current chat and keyboard. Pressing the Android Accessibility shortcut over another app opens a prompt panel on that screen; its Open chat button opens the full conversation. A running task pauses so it cannot take the screen back; tap Resume to continue. Android 14+ can allow dismissing an ongoing notification; opening MagicPhone restores it.
 4. Tap the microphone in the message field to dictate through your Android speech provider. Review or edit the returned text, then Send. No OpenAI API key is required. Recognition availability, language support and offline behavior depend on the provider; it may send audio to its own servers.
 5. Select applications. **Read**, **Act**, and **Block** are separate choices. Block wins. No app has access by default. Allow the apps you want MagicPhone to use, or explicitly enable automatic access.
 6. Choose **Continue with ChatGPT**, complete consent in the system browser and return to MagicPhone. Load account-available models and select one. Eligibility and usage limits depend on the account. Optional OpenAI-key and compatible/local connections are independent profiles.
@@ -55,6 +69,10 @@ Version **0.1.3** improves local UI responsiveness with background history persi
 Version **0.1.4** adds a microphone for Android voice input, replaces the floating bar with an ongoing notification, and pauses active work when the Accessibility shortcut opens chat. Repeated Pause is safe, and keyboard focus waits for the resumed activity. See [voice and controls verification](docs/VERIFICATION-VOICE.md).
 
 Version **0.1.5** enables screenshots of MagicPhone and shows a message bubble over other apps when the agent needs an answer. Tap it to return to the requesting chat with the draft preserved, input focused and keyboard open. Send answers a waiting question without an extra Resume step. Dismiss hides that bubble; the question remains in the ongoing notification and encrypted history. Bubbles hide while the chat is visible or the screen is locked. See [bubble and screenshot verification](docs/VERIFICATION-BUBBLE.md).
+
+Version **0.2.2** adds **Ask MagicPhone** over the currently open app when you press Android’s Accessibility button. Type a request about any permitted screen—such as translating visible text, explaining an image or operating the current app—and press **Send**. The panel and keyboard close before MagicPhone reads the app; a model supporting images also receives a screenshot through the same permission checks. Nothing is captured or sent merely by opening the panel. Protected/blocked screens remain excluded. **Open chat** expands the conversation with the input focused. If a task is already active, opening the panel pauses it; Send supplies your correction and continues it.
+
+**Settings → Access → Show completion and error bubbles** controls the final result bubbles and is **on by default**, including for existing installations. Each bubble previews the final answer or localized error; **Open chat** opens that conversation. Questions still show their own bubbles when the result switch is off. **Read aloud / Stop reading** is available below each assistant response and in bubbles through Android’s installed text-to-speech engine. Greek/other voices may need downloading in Android settings; engines can process speech online. Playback is user initiated. The app also shows the open-source/AI automation disclaimer in onboarding and automatic-access settings. See [0.2.2 verification](docs/VERIFICATION-0.2.2.md).
 
 ## Other entry points and libraries
 

@@ -1064,3 +1064,29 @@ h1,h2,h3 {
     transform:none;
   }
 }
+
+
+.disclaimer-page {
+  max-width:820px;
+  padding-block:48px 80px;
+}
+
+.disclaimer-page h1 {
+  font-size:clamp(32px,4vw,52px);
+  line-height:1.12;
+  letter-spacing:-1.6px;
+  margin-block:24px 36px;
+  overflow-wrap:break-word;
+}
+
+.disclaimer-page p:not(.eyebrow) {
+  font-size:16px;
+  line-height:1.8;
+  color:var(--muted);
+  margin-top:24px;
+}
+
+.disclaimer-licenses {
+  border-top:1px solid var(--line);
+  padding-top:24px;
+}

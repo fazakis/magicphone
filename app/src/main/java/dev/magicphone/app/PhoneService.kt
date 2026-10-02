@@ -23,6 +23,8 @@ class PhoneService : AccessibilityService() {
     // Counts/flags only, for the opt-in debug harness. No screen text or package names.
     var inspectionDiagnostics: String = ""
         private set
+    var shortcutClicks: Int = 0
+        private set
     private var revision = 0L
     private var lastSignature = ""
     private var lastScreen = Screen()
@@ -31,12 +33,15 @@ class PhoneService : AccessibilityService() {
     private var inputBubble: View? = null
     private var bubbleRequest: String? = null
     private var dismissedRequest: String? = null
+    val quickPrompt by lazy { QuickPrompt(this) }
+    private var bubbleSpeech: TextView? = null
+    private var speechObserver: Job? = null
     private var lastShot = 0L
     private var screenReceiver: BroadcastReceiver? = null
     private val shortcut = object : AccessibilityButtonController.AccessibilityButtonCallback() {
         override fun onClicked(controller: AccessibilityButtonController) {
-            runtime.pauseForChat()
-            startActivity(MainActivity.chatIntent(this@PhoneService))
+            if (BuildConfig.DEBUG) shortcutClicks++
+            quickPrompt.show()
         }
     }
     private val manager
@@ -46,12 +51,15 @@ class PhoneService : AccessibilityService() {
         super.onServiceConnected()
         runtime.phone = this
         runtime.connected.value = true
+        speechObserver = runtime.scope.launch { runtime.speech.active.collect { updateInputBubble() } }
         accessibilityButtonController.registerAccessibilityButtonCallback(shortcut, Handler(Looper.getMainLooper()))
         val receiver =
             object : BroadcastReceiver() {
                 override fun onReceive(context: Context, intent: Intent) {
                     if (intent.action == Intent.ACTION_SCREEN_OFF) {
                         hideInputBubble()
+                        quickPrompt.cancel()
+                        runtime.speech.stop()
                         runtime.localApproval(false)
                         runtime.agent.pause()
                     } else updateInputBubble()
@@ -76,6 +84,8 @@ class PhoneService : AccessibilityService() {
         // State binding is derived from a fresh filtered tree, not delayed event order.
         if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
             runtime.agent.pause()
+            quickPrompt.cancel()
+            runtime.speech.stop()
             hideInputBubble()
         } else if (event?.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
                 AccessibilityEvent.TYPE_WINDOWS_CHANGED)) updateInputBubble()
@@ -88,6 +98,9 @@ class PhoneService : AccessibilityService() {
 
     override fun onDestroy() {
         accessibilityButtonController.unregisterAccessibilityButtonCallback(shortcut)
+        quickPrompt.cancel()
+        speechObserver?.cancel()
+        runtime.speech.shutdown()
         runtime.stop()
         runtime.phone = null
         runtime.connected.value = false
@@ -150,7 +163,7 @@ class PhoneService : AccessibilityService() {
             val height = geometry.height().takeIf { it > 0 } ?: display.heightPixels
             // Never traverse another application's root. Unknown overlays/IME/multi-window suppress
             // capture.
-            val ownedIds = listOfNotNull(overlay, inputBubble).filter { it.isAttachedToWindow }.mapNotNull { view ->
+            val ownedIds = listOfNotNull(overlay, inputBubble, quickPrompt.view).filter { it.isAttachedToWindow }.mapNotNull { view ->
                 val info = view.createAccessibilityNodeInfo() ?: return@mapNotNull null
                 try { info.windowId.takeIf { it >= 0 } } finally { info.recycle() }
             }.toSet()
@@ -172,7 +185,7 @@ class PhoneService : AccessibilityService() {
             if (BuildConfig.DEBUG) inspectionDiagnostics =
                 "root=${root != null},locked=$locked,mixedApplications=$mixedApplications," +
                     "activeSystem=$activeSystem,foreignOverlay=$foreignOverlay," +
-                    "ownedWindows=${listOfNotNull(overlay, inputBubble).count { it.isAttachedToWindow }}," +
+                    "ownedWindows=${listOfNotNull(overlay, inputBubble, quickPrompt.view).count { it.isAttachedToWindow }}," +
                     "overlayWindows=${windows.count { it.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY }}," +
                     "ownedIdMatches=${windows.count { it.id in ownedIds }}"
             if (root == null || locked || mixed) {
@@ -279,7 +292,7 @@ class PhoneService : AccessibilityService() {
             }
             candidates.clear() // The reference map now owns these node copies.
             val rects =
-                listOfNotNull(overlay, inputBubble)
+                listOfNotNull(overlay, inputBubble, quickPrompt.view)
                     .filter { it.isAttachedToWindow }
                     .map { view ->
                         val pos = IntArray(2)
@@ -589,27 +602,47 @@ class PhoneService : AccessibilityService() {
     fun hideInputBubble() {
         inputBubble?.let { runCatching { manager.removeView(it) } }
         inputBubble = null
+        bubbleSpeech = null
         bubbleRequest = null
     }
 
+    private fun currentBubble(): InputRequest? {
+        val state = runtime.agent.state.value
+        if (state in setOf(RunState.WAITING_USER, RunState.PAUSED) && runtime.agent.question.value.isNotBlank())
+            return runtime.inputRequest.value
+        return runtime.resultRequest.value?.takeIf {
+            runtime.settings.value.showTaskResultBubbles && it.conversation == runtime.current.value &&
+                ((it.kind == BubbleKind.COMPLETED && state == RunState.COMPLETED) ||
+                    (it.kind == BubbleKind.FAILED && state == RunState.FAILED))
+        }
+    }
+
     private fun updateInputBubble() {
-        val request = runtime.inputRequest.value
+        val request = currentBubble()
         val interactive = getSystemService(PowerManager::class.java).isInteractive &&
             !getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        val waiting = runtime.agent.state.value in setOf(RunState.WAITING_USER, RunState.PAUSED) &&
-            runtime.agent.question.value.isNotBlank()
-        if (request == null || !waiting || !interactive || overlay != null ||
+        if (request == null || !interactive || overlay != null || quickPrompt.view != null ||
             runtime.visibleChat.value == request.conversation || request.id == dismissedRequest) {
             hideInputBubble()
             return
         }
-        if (bubbleRequest == request.id && inputBubble != null) return
+        if (bubbleRequest == request.id && inputBubble != null) {
+            bubbleSpeech?.text = getString(if (runtime.speech.active.value == request.id) R.string.stop_reading else R.string.read_aloud)
+            return
+        }
         hideInputBubble()
+        val titleResource = when (request.kind) {
+            BubbleKind.QUESTION -> R.string.input_bubble_title
+            BubbleKind.COMPLETED -> R.string.task_result_completed_title
+            BubbleKind.FAILED -> R.string.task_result_failed_title
+        }
+        val openResource = if (request.kind == BubbleKind.QUESTION) R.string.input_bubble_reply else R.string.task_result_open
         fun dp(value: Int) = (resources.displayMetrics.density * value).toInt()
         fun reply() {
             // Ignore a stale local surface. Model/script operations cannot invoke this control.
-            if (runtime.inputRequest.value?.id != request.id) return
+            if (currentBubble()?.id != request.id) return
             dismissedRequest = request.id
+            runtime.speech.stop()
             hideInputBubble()
             startActivity(MainActivity.chatIntent(this, request.conversation))
         }
@@ -627,7 +660,7 @@ class PhoneService : AccessibilityService() {
             setOnClickListener { reply() }
             addView(LinearLayout(this@PhoneService).apply {
                 gravity = Gravity.CENTER_VERTICAL
-                addView(text(getString(R.string.input_bubble_title)).apply {
+                addView(text(getString(titleResource)).apply {
                     textSize = 14f
                     setTypeface(typeface, android.graphics.Typeface.BOLD)
                 }, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -638,15 +671,21 @@ class PhoneService : AccessibilityService() {
                     gravity = Gravity.CENTER
                     contentDescription = getString(R.string.dismiss)
                     filterTouchesWhenObscured = true
-                    setOnClickListener { dismissedRequest = request.id; hideInputBubble() }
+                    setOnClickListener { dismissedRequest = request.id; runtime.speech.stop(); hideInputBubble() }
                 }, LinearLayout.LayoutParams(dp(48), dp(48)))
             })
-            addView(text(request.message).apply {
-                maxLines = 4
+            addView(text(spokenText(request.message).replace(Regex("\\n\\s*\\n"), "\n")).apply {
+                maxLines = 6
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 setPadding(0, 0, dp(6), dp(10))
             })
-            addView(text(getString(R.string.input_bubble_reply)).apply {
+            addView(text(getString(R.string.read_aloud)).apply {
+                bubbleSpeech = this
+                minHeight = dp(40); gravity = Gravity.CENTER_VERTICAL
+                setTextColor(0xffb8f3d1.toInt()); filterTouchesWhenObscured = true
+                setOnClickListener { if (currentBubble()?.id == request.id) runtime.speech.toggle(request.id, request.message) }
+            })
+            addView(text(getString(openResource)).apply {
                 textSize = 14f
                 setTextColor(0xffb8f3d1.toInt())
                 setTypeface(typeface, android.graphics.Typeface.BOLD)
@@ -667,7 +706,7 @@ class PhoneService : AccessibilityService() {
             gravity = Gravity.BOTTOM or Gravity.END
             x = dp(16)
             y = minOf(dp(96), bounds.height() / 5)
-            title = getString(R.string.input_bubble_title)
+            title = getString(titleResource)
         }
         // Set ownership before attaching: window events must not recursively create another bubble.
         bubbleRequest = request.id
@@ -680,6 +719,7 @@ class PhoneService : AccessibilityService() {
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
+        quickPrompt.cancel()
         hideInputBubble()
         updateInputBubble()
     }

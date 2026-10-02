@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings as AndroidSettings
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -119,8 +121,18 @@ fun SettingsPage(r: AppRuntime) {
             1 -> item(key = "phone-access") {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     BoxCard {
+                        Row(Modifier.fillMaxWidth().toggleable(value = settings.showTaskResultBubbles, role = Role.Switch,
+                            onValueChange = { r.saveSettings(settings.copy(showTaskResultBubbles = it)) }),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text(s(R.string.task_result_bubbles), Modifier.weight(1f))
+                            Switch(settings.showTaskResultBubbles, onCheckedChange = null)
+                        }
+                        Info(s(R.string.task_result_bubbles_help))
+                    }
+                    BoxCard {
                         Text(s(R.string.all_apps_title), style = MaterialTheme.typography.titleMedium)
                         Info(s(R.string.all_apps_help))
+                        AutomationDisclaimer()
                         Button({ r.setAllowAllApps(!settings.policy.allowAllApps) }) {
                             Text(s(if (settings.policy.allowAllApps) R.string.all_apps_disable else R.string.all_apps_enable))
                         }
@@ -164,6 +176,7 @@ fun SettingsPage(r: AppRuntime) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     McpPage(r)
                     DataPage(r)
+                    AutomationDisclaimer()
                     Info("MagicPhone ${BuildConfig.VERSION_NAME} · MIT / Apache-2.0")
                 }
             }
