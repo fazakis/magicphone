@@ -8,25 +8,26 @@ import okhttp3.mockwebserver.*
 
 class ProviderTest {
     @Test
-    fun fastReasoningUsesSupportedLowEffortWithoutChangingModel() = runTest {
+    fun selectedReasoningAndSpeedAreSentWithoutChangingModel() = runTest {
         val server = MockWebServer()
         server.start()
         try {
             val endpoint = server.url("/").toString().replace("localhost", "127.0.0.1")
-            for ((model, fast, expected) in listOf(
-                Triple("gpt-6-astra", true, "low"),
-                Triple("gpt-6-astra", false, ""),
-                Triple("custom-unknown-model", true, ""),
+            for ((model, effort, tier) in listOf(
+                Triple("gpt-6-astra", "low", "ultrafast"),
+                Triple("gpt-6-astra", "max", null),
+                Triple("custom-unknown-model", null, null),
             )) {
                 server.enqueue(MockResponse().setBody("data: {\"type\":\"response.completed\",\"response\":{\"output\":[]}}\n\n"))
-                val p = ResponsesProvider(Profile(name = "test", kind = ProviderKind.CHATGPT, model = model),
-                    HttpTransport(endpoint, true), fastDecisions = fast) {
+                val p = ResponsesProvider(Profile(name = "test", kind = ProviderKind.OPENAI, model = model, reasoningEffort = effort, serviceTier = tier),
+                    HttpTransport(endpoint, true)) {
                     BoundSecret(Destinations.origin(Destinations.url(endpoint, true)), "fixture-token")
                 }
                 p.respond(listOf(message("user", "test"))) {}
                 val body = JsonCodec.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
                 assertEquals(model, body.str("model"))
-                assertEquals(expected, (body["reasoning"] as? JsonObject)?.str("effort").orEmpty())
+                assertEquals(effort, (body["reasoning"] as? JsonObject)?.str("effort"))
+                assertEquals(tier, (body["service_tier"] as? JsonPrimitive)?.content)
                 assertEquals(JsonPrimitive(false), body["store"])
                 assertEquals(JsonPrimitive(true), body["stream"])
             }

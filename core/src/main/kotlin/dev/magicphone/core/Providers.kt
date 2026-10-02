@@ -4,8 +4,6 @@ package dev.magicphone.core
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
 
-data class ModelChoice(val id: String, val name: String)
-
 data class Call(val id: String, val actions: List<Action>)
 
 data class Reply(
@@ -14,6 +12,7 @@ data class Reply(
     val output: List<JsonElement>,
     val usage: String = "",
     val diagnostics: String = "",
+    val modelInfo: ModelRunInfo? = null,
 )
 
 interface ModelProvider {
@@ -129,17 +128,8 @@ fun message(role: String, text: String, images: List<String> = emptyList()): Jso
 class ResponsesProvider(
     private val profile: Profile,
     private val http: HttpTransport = HttpTransport(profile.endpoint),
-    private val fastDecisions: Boolean = true,
     private val secret: suspend () -> BoundSecret,
 ) : ModelProvider {
-    companion object {
-        // Documented low-effort support. Unknown/custom model IDs retain their defaults.
-        fun supportsLowEffort(model: String) = model in setOf(
-            "gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna",
-            "gpt-5.6", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4",
-        )
-    }
-
     init {
         Destinations.profile(profile)
         require(profile.kind in setOf(ProviderKind.CHATGPT, ProviderKind.OPENAI))
@@ -154,15 +144,17 @@ class ResponsesProvider(
                 .jsonArray
                 .map { it.jsonObject }
                 .filter { it.str("visibility") == "list" }
-                .map { ModelChoice(it.str("slug"), it.str("display_name")) }
+                .map { ModelOptions.parse(it, chatGpt = true) }
+                .filter { it.id.isNotBlank() }
+                .distinctBy { it.id }
         else
-            data["data"]!!.jsonArray.map {
-                it.jsonObject.str("id").let { name -> ModelChoice(name, name) }
-            }
+            data["data"]!!.jsonArray.map { ModelOptions.parse(it.jsonObject, chatGpt = false) }
+                .filter { it.id.isNotBlank() }.distinctBy { it.id }
     }
 
     override suspend fun respond(input: List<JsonElement>, delta: (String) -> Unit): Reply {
         require(profile.model.isNotBlank() && profile.functions)
+        ModelOptions.validate(profile)
         val body = buildJsonObject {
             put("model", profile.model)
             put("instructions", ToolSchema.instructions)
@@ -170,8 +162,8 @@ class ResponsesProvider(
             put("store", false)
             put("stream", true)
             put("parallel_tool_calls", false)
-            if (fastDecisions && supportsLowEffort(profile.model))
-                putJsonObject("reasoning") { put("effort", "low") }
+            profile.reasoningEffort?.let { effort -> putJsonObject("reasoning") { put("effort", effort) } }
+            profile.serviceTier?.let { put("service_tier", it) }
             put(
                 "tools",
                 JsonArray(
@@ -270,7 +262,7 @@ class ResponsesProvider(
             (final["usage"] as? JsonObject)
                 ?.let { "${it.int("input_tokens")} in · ${it.int("output_tokens")} out" }
                 .orEmpty(),
-            "effort=${if (fastDecisions && supportsLowEffort(profile.model)) "low" else "default"},events=$events,doneItems=$doneItems,doneCalls=$doneCalls,argumentDeltas=$argumentDeltas," +
+            "effort=${profile.reasoningEffort ?: "default"},tier=${profile.serviceTier ?: "default"},events=$events,doneItems=$doneItems,doneCalls=$doneCalls,argumentDeltas=$argumentDeltas," +
                 "finalItems=${finalOutput.size},resolvedItems=${output.size},messages=${output.count { (it as? JsonObject)?.str("type") == "message" }}," +
                 "reasoning=${output.count { (it as? JsonObject)?.str("type") == "reasoning" }}," +
                 "calls=${calls.size},textChars=${text.length}," +
@@ -279,6 +271,7 @@ class ResponsesProvider(
                         (part as? JsonObject)?.str("text")?.length ?: 0
                     } ?: 0
                 }}",
+            modelInfo = ModelRunInfo.from(profile, final),
         )
     }
 }

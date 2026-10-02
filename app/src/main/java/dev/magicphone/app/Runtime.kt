@@ -23,7 +23,6 @@ data class Settings(
     // Decode existing installations without re-enabling the retired overlay controls.
     val floating: Boolean = false,
     val secondary: String = "",
-    val fastDecisions: Boolean = true,
 )
 
 class MagicApp : Application() {
@@ -57,6 +56,11 @@ class AppRuntime(val app: Application) {
     }
     val approval = MutableStateFlow<Approval?>(null)
     val models = MutableStateFlow<List<ModelChoice>>(emptyList())
+    val modelsLoading = MutableStateFlow(false)
+    val modelsError = MutableStateFlow("")
+    private var modelJob: Job? = null
+    private var modelEpoch = 0L
+    private var modelsOwner = ""
     val connected = MutableStateFlow(false)
     val busy = MutableStateFlow(false)
     val mcpCatalog = MutableStateFlow<List<McpTool>>(emptyList())
@@ -218,7 +222,7 @@ class AppRuntime(val app: Application) {
 
     private fun loadSettings(): Settings =
         try {
-            vault.read("settings")?.let { JsonCodec.decodeFromString(Settings.serializer(), it) }
+            vault.read("settings")?.let(::decodeSettings)
                 ?: Settings()
         } catch (_: Exception) {
             notice.value = "storage_recovery"
@@ -235,8 +239,23 @@ class AppRuntime(val app: Application) {
         }
 
     fun saveSettings(value: Settings) {
-        vault.write("settings", JsonCodec.encodeToString(Settings.serializer(), value))
-        settings.value = value
+        val accountChanged = value.activeAccount != settings.value.activeAccount
+        val normalized = if (!accountChanged) value else value.copy(profiles = value.profiles.map { p ->
+            if (p.kind != ProviderKind.CHATGPT) p else {
+                val next = p.copy(modelChoice = null, serviceTier = null)
+                next.copy(reasoningEffort = next.reasoningEffort?.takeIf { it in ModelOptions.reasoning(next) })
+            }
+        })
+        if (modelContext(normalized) != modelContext(settings.value)) {
+            modelEpoch++
+            modelJob?.cancel()
+            models.value = emptyList()
+            modelsLoading.value = false
+            modelsError.value = ""
+            modelsOwner = ""
+        }
+        vault.write("settings", JsonCodec.encodeToString(Settings.serializer(), normalized))
+        settings.value = normalized
     }
 
     fun setAllowAllApps(enabled: Boolean) {
@@ -244,7 +263,6 @@ class AppRuntime(val app: Application) {
         val current = settings.value
         saveSettings(current.copy(policy = current.policy.copy(
             allowAllApps = enabled,
-            planOnly = if (enabled) false else current.policy.planOnly,
         )))
     }
 
@@ -480,18 +498,22 @@ class AppRuntime(val app: Application) {
         }
     }
 
+    private fun chatGptProvider(profile: Profile): ModelProvider {
+        val client = settings.value.activeAccount
+        return ResponsesProvider(profile) {
+            if (client.isEmpty()) throw SafeFailure("sign_in_required")
+            val a = auth.fresh({ loadAccount(client) }, ::saveAccount)
+            BoundSecret("https://api.openai.com:443", a.access)
+        }
+    }
+
     fun provider(profile: Profile): ModelProvider =
         when (profile.kind) {
             ProviderKind.MOCK -> MockProvider()
             ProviderKind.CHATGPT ->
-                ResponsesProvider(profile, fastDecisions = settings.value.fastDecisions) {
-                    val client = settings.value.activeAccount
-                    if (client.isEmpty()) throw SafeFailure("sign_in_required")
-                    val a = auth.fresh({ loadAccount(client) }, ::saveAccount)
-                    BoundSecret("https://api.openai.com:443", a.access)
-                }
+                chatGptProvider(profile)
             ProviderKind.OPENAI ->
-                ResponsesProvider(profile, fastDecisions = settings.value.fastDecisions) {
+                ResponsesProvider(profile) {
                     credential(profile.id, profile.endpoint)
                         ?: throw SafeFailure("api_key_required")
                 }
@@ -501,15 +523,46 @@ class AppRuntime(val app: Application) {
                 }
         }
 
-    fun discoverModels() {
-        scope.launch {
+    private fun modelContext(s: Settings): String {
+        val p = s.profiles.find { it.id == s.selected }
+        return "${p?.id}|${p?.kind}|${p?.endpoint}|${if (p?.kind == ProviderKind.CHATGPT) s.activeAccount else ""}"
+    }
+
+    fun discoverModels(refresh: Boolean = true) {
+        val p = settings.value.profiles.find { it.id == settings.value.selected } ?: return
+        if (p.kind == ProviderKind.MOCK) return
+        if (p.kind == ProviderKind.CHATGPT && settings.value.activeAccount.isEmpty()) return
+        val owner = modelContext(settings.value)
+        if (!refresh && (modelsLoading.value || (modelsOwner == owner && models.value.isNotEmpty()))) return
+        val epoch = ++modelEpoch
+        modelJob?.cancel()
+        modelsLoading.value = true
+        modelsError.value = ""
+        modelJob = scope.launch {
             try {
-                val p = settings.value.profiles.single { it.id == settings.value.selected }
-                models.value = provider(p).models()
+                val choices = provider(p).models()
+                if (epoch != modelEpoch || modelContext(settings.value) != owner) return@launch
+                models.value = choices
+                modelsOwner = owner
+                val current = settings.value.profiles.find { it.id == p.id } ?: return@launch
+                choices.find { it.id == current.model }?.let { selected ->
+                    val updated = ModelOptions.selected(current, selected)
+                    saveSettings(settings.value.copy(profiles = settings.value.profiles.map { if (it.id == p.id) updated else it }))
+                }
+            } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
-                notice.value = (e as? SafeFailure)?.code ?: "models_failed"
+                if (epoch == modelEpoch && modelContext(settings.value) == owner)
+                    modelsError.value = (e as? SafeFailure)?.code ?: "models_failed"
+            } finally {
+                if (epoch == modelEpoch) modelsLoading.value = false
             }
         }
+    }
+
+    fun selectModel(profile: Profile, choice: ModelChoice) {
+        stop()
+        val updated = ModelOptions.selected(profile, choice)
+        saveSettings(settings.value.copy(profiles = settings.value.profiles.map { if (it.id == profile.id) updated else it }))
     }
 
     fun start(text: String, images: List<String> = emptyList(), secondary: Boolean = false) {
@@ -577,7 +630,6 @@ class AppRuntime(val app: Application) {
                 selected = p.id,
                 policy =
                     settings.value.policy.copy(
-                        planOnly = false,
                         apps =
                             settings.value.policy.apps +
                                 ("dev.magicphone.fixture" to

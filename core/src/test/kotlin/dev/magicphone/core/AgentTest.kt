@@ -11,7 +11,7 @@ class AgentTest {
     private fun gate(approve: suspend (Approval) -> Boolean = { true }) =
         Gateway(
             Policy("own.app"),
-            { PolicyConfig(apps = mapOf("test.app" to AppRule(true, true)), planOnly = false) },
+            { PolicyConfig(apps = mapOf("test.app" to AppRule(true, true))) },
             object : DevicePort {
                 override suspend fun inspect(app: String) =
                     Screen(app = app, locked = false, mixed = false)
@@ -88,7 +88,7 @@ class AgentTest {
             override val supportsImages = false
             override suspend fun models() = emptyList<ModelChoice>()
             override suspend fun respond(input: List<JsonElement>, delta: (String) -> Unit) =
-                Reply("", emptyList(), emptyList(), diagnostics = "events=2")
+                Reply("", emptyList(), emptyList(), diagnostics = "events=2", modelInfo = ModelRunInfo("gpt-6.1-sol", "low", "ultrafast", reportedTier = "default"))
         }
         agent.start(backgroundScope, empty, "Open the test app")
         runCurrent()
@@ -96,6 +96,9 @@ class AgentTest {
         assertEquals("empty_model_response", agent.error.value)
         assertEquals(listOf("empty_model_response"), saved)
         assertEquals("events=2", agent.diagnostics.value)
+        assertEquals("default", agent.modelInfo.value!!.reportedTier)
+        agent.clearView()
+        assertNull(agent.modelInfo.value)
         assertTrue(agent.actions.value.isEmpty())
     }
 
@@ -170,7 +173,7 @@ class AgentTest {
         val g =
             Gateway(
                 Policy("own.app"),
-                { PolicyConfig(apps = mapOf("test.app" to AppRule(true, true)), planOnly = false) },
+                { PolicyConfig(apps = mapOf("test.app" to AppRule(true, true))) },
                 object : DevicePort {
                     override suspend fun inspect(app: String) = Screen(app = app, locked = false)
 

@@ -2,7 +2,7 @@
 
 Library scripts are manually reviewed finite JSON programs. They do not call a model and cannot execute general Lua, JavaScript, shell or native code. The bounded language is intentionally small enough to audit. Each step calls the same policy gateway as a model action, including additional observations used for label resolution.
 
-Paste this in Library's script editor and choose Review & enable. Install the practice app and grant it Read/Act first; turn off plan-only to execute mutations.
+Paste this in Library's script editor and choose Review & enable. Install the practice app and grant it Read/Act first.
 
 ```json
 {

@@ -37,6 +37,7 @@ class Agent(
     val usage = MutableStateFlow("")
     val error = MutableStateFlow("")
     val diagnostics = MutableStateFlow("")
+    val modelInfo = MutableStateFlow<ModelRunInfo?>(null)
     val metrics = MutableStateFlow(RunMetrics())
     private val corrections = Channel<String>(32)
     private var job: Job? = null
@@ -81,6 +82,7 @@ class Agent(
         usage.value = ""
         error.value = ""
         diagnostics.value = ""
+        modelInfo.value = null
         metrics.value = RunMetrics()
     }
 
@@ -98,6 +100,7 @@ class Agent(
         gateway.start()
         error.value = ""
         diagnostics.value = ""
+        modelInfo.value = null
         metrics.value = RunMetrics()
         stream.value = ""
         checklist.value = emptyList()
@@ -217,6 +220,7 @@ class Agent(
                         if (state.value == RunState.PAUSED) resumeSignal.await()
                         context += reply.output
                         diagnostics.value = reply.diagnostics
+                        modelInfo.value = reply.modelInfo
                         usage.value = reply.usage
                         if (reply.text.isNotBlank() && reply.calls.isNotEmpty())
                             persist(Sanitizer.text(reply.text), state.value)

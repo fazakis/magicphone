@@ -39,26 +39,14 @@
       </div>
       <div class="hero-visual">
         <div class="orbit orbit-one" aria-hidden="true"></div><div class="orbit orbit-two" aria-hidden="true"></div>
-        <div class="float-label voice-label"><span aria-hidden="true">▂ ▆ █ ▃ ▅</span> A little less tapping.</div>
-        <div class="phone" aria-label="Illustrated MagicPhone task example">
-          <div class="phone-status" aria-hidden="true"><span>9:41</span><span class="camera"></span><span>▰ ▰ ▰</span></div>
-          <div class="phone-header"><img src="assets/mark.svg" width="31" height="31" alt=""><div><strong>MagicPhone</strong><span>Your everyday assistant</span></div><span class="phone-menu" aria-hidden="true">···</span></div>
-          <div class="phone-chat" id="demo-chat" aria-live="polite" aria-atomic="true">
-            <div class="chat-day">LET’S MAKE THIS EASY</div>
-            <div class="user-message" id="demo-prompt">Open Maps and search for coffee nearby.</div>
-            <div class="assistant-message"><span class="assistant-mark" aria-hidden="true">✦</span><p id="demo-answer">On it. I’ll open Maps and look for nearby coffee spots.</p></div>
-            <div class="task-card"><div class="task-card-title"><span class="status-dot" aria-hidden="true"></span><span id="demo-state">A few taps, taken care of</span></div><ol id="demo-steps"><li><span aria-hidden="true">✓</span> Open Maps</li><li><span aria-hidden="true">✓</span> Search “coffee near me”</li><li><span aria-hidden="true">✓</span> Show the results</li></ol></div>
-            <div class="reply-preview" id="demo-result"><strong>You’re in the right place.</strong><span>Explore the results in Maps.</span></div>
-          </div>
-          <div class="phone-compose" aria-hidden="true"><span>What’s next?</span><span class="mic-symbol">♩</span><span class="send-symbol">↑</span></div>
-          <div class="phone-home" aria-hidden="true"></div>
-        </div>
-        <div class="float-label done-label"><span class="label-icon" aria-hidden="true">✓</span><div>Your apps.<br><strong>A helping hand.</strong></div></div>
-        <p class="demo-caption">An illustrated example. App behavior varies.</p>
+        <a class="phone" id="preview-full" href="assets/app-home.png" target="_blank" rel="noopener" aria-label="Open the MagicPhone home screenshot at full size">
+          <img id="app-preview" src="assets/app-home.png" width="1080" height="2340" fetchpriority="high" alt="Real MagicPhone home screen with task suggestions, voice input, selected model and Task, History, Library and Settings navigation.">
+        </a>
+        <p class="demo-caption" id="preview-caption" aria-live="polite">The real MagicPhone interface. Tap the screen to see it up close.</p>
       </div>
     </section>
-    <section class="example-strip" aria-label="Explore example tasks">
-      <div class="wrap examples"><span class="example-label">WHAT WOULD YOU SAY?</span><div class="example-options" role="group" aria-label="Choose an illustrated task"><button class="example-button" type="button" data-example="coffee" aria-pressed="true"><span aria-hidden="true">↗</span> Find a coffee spot</button><button class="example-button" type="button" data-example="settings" aria-pressed="false"><span aria-hidden="true">☼</span> Open display settings</button><button class="example-button" type="button" data-example="question" aria-pressed="false"><span aria-hidden="true">✦</span> Pick up the conversation</button></div></div>
+    <section class="example-strip" aria-label="Explore MagicPhone screenshots">
+      <div class="wrap examples"><span class="example-label">TAKE A LOOK INSIDE</span><div class="example-options" role="group" aria-label="Choose an app screenshot"><button class="example-button" type="button" data-preview="home" aria-controls="app-preview" aria-pressed="true"><span aria-hidden="true">↗</span> Your next task</button><button class="example-button" type="button" data-preview="models" aria-controls="app-preview" aria-pressed="false"><span aria-hidden="true">☼</span> Model &amp; thinking</button><button class="example-button" type="button" data-preview="result" aria-controls="app-preview" aria-pressed="false"><span aria-hidden="true">✓</span> A completed task</button></div></div>
     </section>
     <section class="section wrap" id="how-it-works" aria-labelledby="how-title">
       <div class="section-heading"><p class="eyebrow">FROM WORDS TO ACTION</p><h2 id="how-title">A more natural way<br>to use your phone.</h2><p>You know what you want. MagicPhone helps with the steps in between.</p></div>
@@ -74,7 +62,7 @@
         <div class="control-features">
           <article><span class="feature-icon" aria-hidden="true">◎</span><div><h3>Your apps, your boundaries.</h3><p>Select which apps it can read and use. Approve actions by default, or explicitly enable automatic access. Blocked apps stay blocked.</p></div></article>
           <article><span class="feature-icon" aria-hidden="true">Ⅱ</span><div><h3>Always a way to take over.</h3><p>Pause, resume or stop from the task notification. Passwords, permission prompts and payment authorization stay with you.</p></div></article>
-          <article><span class="feature-icon" aria-hidden="true">⌁</span><div><h3>Your choice of model.</h3><p>Connect an eligible ChatGPT account or configure an API or compatible provider. Selected task and screen context goes to that provider.</p></div></article>
+          <article><span class="feature-icon" aria-hidden="true">⌁</span><div><h3>Your choice of model.</h3><p>Connect ChatGPT or an API provider, then choose your model, thinking level and speed. See what the server actually reports after each response.</p></div></article>
           <article><span class="feature-icon" aria-hidden="true">↗</span><div><h3>Open to the last line.</h3><p>No ads or developer analytics. Inspect the code, build it yourself, and make it yours under MIT or Apache-2.0.</p></div></article>
         </div>
       </div>
@@ -84,7 +72,7 @@
       <div class="details-grid"><article><span class="detail-glyph" aria-hidden="true">Aa</span><h3>Speak your language.</h3><p>English and Greek interfaces, Unicode text, and voice input through your Android speech provider.</p></article><article><span class="detail-glyph" aria-hidden="true">↩</span><h3>Keep the thread.</h3><p>Encrypted chat history, editable drafts and follow-up tasks. Return through the Accessibility shortcut or a reply bubble.</p></article><article><span class="detail-glyph" aria-hidden="true">⌘</span><h3>Make it your own.</h3><p>Build reusable scripts and app-specific playbooks. Connect optional MCP tools when you need them.</p></article></div>
     </section>
     <section class="get-started wrap" id="get-started" aria-labelledby="start-title">
-      <div><p class="eyebrow">SMALL APP. BIG POSSIBILITIES.</p><h2 id="start-title">Give your phone<br>a helping hand.</h2><p>Try MagicPhone 0.1.5, our early-access Android app. Download the APK, explore the source, and help shape what comes next.</p><div class="hero-actions"><a class="button primary" href="https://github.com/fazakis/magicphone/releases/tag/v0.1.5">Download for Android <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/fazakis/magicphone#build">Build from source <span aria-hidden="true">↗</span></a></div><p class="install-note">Android 11+ · Early access · Debug-signed APK</p></div>
+      <div><p class="eyebrow">SMALL APP. BIG POSSIBILITIES.</p><h2 id="start-title">Give your phone<br>a helping hand.</h2><p>Try MagicPhone 0.2.1, our early-access Android app. Download the APK, explore the source, and help shape what comes next.</p><div class="hero-actions"><a class="button primary" href="https://github.com/fazakis/magicphone/releases/tag/v0.2.1">Download for Android <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/fazakis/magicphone#build">Build from source <span aria-hidden="true">↗</span></a></div><p class="install-note">Android 11+ · Early access · Debug-signed APK</p></div>
       <ol class="setup-list"><li><span>1</span><div><h3>Download &amp; install</h3><p>Get the APK from GitHub Releases. Read the release notes, then open it on your phone.</p></div></li><li><span>2</span><div><h3>Choose your setup</h3><p>Enable Accessibility manually, choose app access, and connect your model provider.</p></div></li><li><span>3</span><div><h3>Start with something simple</h3><p>Open an app, try a task, or build the optional practice app for an account-free demo.</p></div></li></ol>
     </section>
     <section class="section wrap faq-section" aria-labelledby="faq-title">

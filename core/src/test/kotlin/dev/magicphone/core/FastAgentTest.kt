@@ -37,7 +37,7 @@ class FastAgentTest {
         }
     }
     private fun gate(device: Device, config: () -> PolicyConfig = {
-        PolicyConfig(apps = mapOf(pkg to AppRule(true, true)), planOnly = false, allowAllApps = true)
+        PolicyConfig(apps = mapOf(pkg to AppRule(true, true)), allowAllApps = true)
     }) = Gateway(Policy("own.app"), config, device, object : ApprovalPort {
         override suspend fun request(approval: Approval): Boolean = error("Unexpected approval")
     })
@@ -124,7 +124,7 @@ class FastAgentTest {
             }
         }
         val gateway = Gateway(Policy("own.app"), {
-            PolicyConfig(apps = mapOf(pkg to AppRule(allowed, allowed)), planOnly = false,
+            PolicyConfig(apps = mapOf(pkg to AppRule(allowed, allowed)),
                 grants = listOf(Grant(pkg, setOf(Op.TAP), Long.MAX_VALUE)))
         }, port, object : ApprovalPort { override suspend fun request(approval: Approval) = true })
         val agent = Agent(gateway, { _, _ -> })

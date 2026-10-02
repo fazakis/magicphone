@@ -181,7 +181,6 @@ data class AppRule(
 @Serializable
 data class PolicyConfig(
     val apps: Map<String, AppRule> = emptyMap(),
-    val planOnly: Boolean = true,
     val grants: List<Grant> = emptyList(),
     val mcp: Map<String, Set<String>> = emptyMap(),
     val allowAllApps: Boolean = false,

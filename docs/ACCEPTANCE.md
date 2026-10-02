@@ -19,7 +19,7 @@ The instrumentation harness enables Accessibility using test-only UiAutomation s
 - [ ] Enable Accessibility manually; disconnect/reconnect it and verify the recovery message.
 - [ ] Practice mode: approve opening the fixture and tapping its bilingual button; observe Counter: 1. Rejecting either action prevents it.
 - [ ] Allow Read but deny Act; observe succeeds and mutations fail. Block overrides both.
-- [ ] Keep plan-only enabled; ask for a coordinate tap, batch, script and MCP side effect. All are blocked.
+- [ ] With app Act access disabled, ask for coordinate taps, batches and scripts. Each remains blocked. MCP side effects still require their separate consent. No plan-only setting remains.
 - [ ] Grant a five-minute semantic tap/scroll/open scope; verify expiry/revocation. Text/coordinates still request approval.
 - [ ] Rotate or change fixture text while approval waits; approve and verify the stale action is rejected.
 - [ ] Pause during inference and approval. No later action dispatches while paused. Resume revalidates. Stop aborts the run.

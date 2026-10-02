@@ -386,7 +386,7 @@ class SecurityTest {
         val gate =
             Gateway(
                 Policy("own.app"),
-                { PolicyConfig(apps = mapOf("test.app" to AppRule(true, true)), planOnly = true) },
+                { PolicyConfig(apps = mapOf("test.app" to AppRule(true, false))) },
                 object : DevicePort {
                     override suspend fun inspect(app: String) = Screen(app = app, locked = false)
 

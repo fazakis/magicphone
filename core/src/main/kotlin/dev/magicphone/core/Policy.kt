@@ -27,7 +27,6 @@ class Policy(private val ownPackage: String) {
         } catch (_: IllegalArgumentException) {
             throw SafeFailure("invalid_action")
         }
-        if (action.op.mutates && config.planOnly) throw SafeFailure("plan_only")
         if (action.isDevice) {
             if (action.app == ownPackage || protectedPackage(action.app))
                 throw SafeFailure("manual_security")
@@ -43,7 +42,6 @@ class Policy(private val ownPackage: String) {
         } catch (_: IllegalArgumentException) {
             return Decision.Deny("invalid_action")
         }
-        if (action.op.mutates && config.planOnly) return Decision.Deny("plan_only")
         if (action.op in setOf(Op.MCP, Op.MCP_CATALOG)) {
             if (action.tool !in config.mcp[action.server].orEmpty())
                 return Decision.Deny("mcp_consent")

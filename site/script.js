@@ -1,46 +1,41 @@
 // Copyright 2026 Nikos Fazakis. SPDX-License-Identifier: MIT OR Apache-2.0
-// Illustrations only: this site never connects to or controls a phone.
-const examples = {
-  coffee: {
-    prompt: 'Open Maps and search for coffee nearby.',
-    answer: 'On it. I’ll open Maps and look for nearby coffee spots.',
-    state: 'A few taps, taken care of',
-    steps: ['Open Maps', 'Search “coffee near me”', 'Show the results'],
-    title: 'You’re in the right place.', result: 'Explore the results in Maps.',
+// Real app captures from the dedicated QA emulator; this gallery does not operate a phone.
+const previews = {
+  home: {
+    src: 'assets/app-home.png',
+    alt: 'Real MagicPhone home screen with task suggestions, voice input, selected model and Task, History, Library and Settings navigation.',
+    label: 'Open the MagicPhone home screenshot at full size',
+    caption: 'The real MagicPhone interface. Tap the screen to see it up close.',
   },
-  settings: {
-    prompt: 'Take me to my display settings.',
-    answer: 'I’ll open Settings and find the display options for you.',
-    state: 'A shortcut to what you need',
-    steps: ['Open Settings', 'Find Display', 'Open display options'],
-    title: 'Ready for your next move.', result: 'Adjust your display from here.',
+  models: {
+    src: 'assets/app-models.png',
+    alt: 'Real MagicPhone model settings showing GPT-6.1 Sol, manual model options, Ultra thinking and Ultrafast processing selected.',
+    label: 'Open the MagicPhone model settings screenshot at full size',
+    caption: 'Your model, thinking and speed controls. Availability depends on your connection.',
   },
-  question: {
-    prompt: 'Search for a place to have lunch.',
-    answer: 'What kind of food are you in the mood for?',
-    state: 'Waiting for your reply',
-    steps: ['Read your task', 'Ask for the missing detail', 'Continue after your answer'],
-    title: 'A question, right where you are.', result: 'Tap the reply bubble to return to your chat.',
+  result: {
+    src: 'assets/app-task-result.png',
+    alt: 'A completed MagicPhone practice task showing requested GPT-6.1 Sol with Low thinking and Ultrafast speed; the server reported Standard processing.',
+    label: 'Open the completed MagicPhone task screenshot at full size',
+    caption: 'An actual practice task. Requested settings and server-reported results, side by side.',
   },
 };
-document.querySelectorAll('[data-example]').forEach((button) => {
+const preview = document.querySelector('#app-preview');
+const fullSize = document.querySelector('#preview-full');
+const caption = document.querySelector('#preview-caption');
+document.querySelectorAll('[data-preview]').forEach((button) => {
   button.addEventListener('click', () => {
-    const example = examples[button.dataset.example];
-    if (!example) return;
-    document.querySelectorAll('[data-example]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
-    document.querySelector('#demo-prompt').textContent = example.prompt;
-    document.querySelector('#demo-answer').textContent = example.answer;
-    document.querySelector('#demo-state').textContent = example.state;
-    const steps = example.steps.map((step, index) => {
-      const item = document.createElement('li');
-      const mark = document.createElement('span');
-      mark.setAttribute('aria-hidden', 'true');
-      mark.textContent = button.dataset.example === 'question' && index === 2 ? '·' : '✓';
-      item.append(mark, document.createTextNode(step));
-      return item;
+    const selected = previews[button.dataset.preview];
+    if (!selected) return;
+    document.querySelectorAll('[data-preview]').forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
+    preview.src = selected.src;
+    preview.alt = selected.alt;
+    fullSize.href = selected.src;
+    fullSize.setAttribute('aria-label', selected.label);
+    caption.textContent = selected.caption;
+    if (window.innerWidth <= 800) preview.closest('.hero-visual').scrollIntoView({
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+      block: 'center',
     });
-    document.querySelector('#demo-steps').replaceChildren(...steps);
-    document.querySelector('#demo-result strong').textContent = example.title;
-    document.querySelector('#demo-result > span').textContent = example.result;
   });
 });

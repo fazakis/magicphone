@@ -68,7 +68,6 @@ class LiveChatGptTest {
             r.saveSettings(r.settings.value.copy(
                 floating = inAppAction,
                 policy = r.settings.value.policy.copy(
-                    planOnly = automatic,
                     allowAllApps = false,
                     apps = if (automatic) r.settings.value.policy.apps - target
                         else r.settings.value.policy.apps + (target to AppRule(true, true)),
@@ -93,10 +92,10 @@ class LiveChatGptTest {
             Assert.assertTrue("Accessibility must already be enabled", r.connected.value)
             if (automatic) {
                 device.wait(Until.findObject(By.text(context.getString(R.string.settings))), 10000).click()
+                device.wait(Until.findObject(By.text(context.getString(R.string.access_section))), 10000).click()
                 device.wait(Until.findObject(By.text(context.getString(R.string.all_apps_enable))), 10000).click()
                 device.wait(Until.hasObject(By.text(context.getString(R.string.all_apps_disable))), 5000)
                 Assert.assertTrue("Actual Settings button enables override", r.settings.value.policy.allowAllApps)
-                Assert.assertFalse("Enabling override exits plan only", r.settings.value.policy.planOnly)
                 Assert.assertNull("No individual permission for fixture", r.settings.value.policy.apps[target])
                 val saved = JsonCodec.decodeFromString(Settings.serializer(), r.vault.read("settings")!!)
                 Assert.assertTrue("Override persists in encrypted settings", saved.policy.allowAllApps)
@@ -238,8 +237,8 @@ class LiveChatGptTest {
                 // The composer stays fixed while chat contents are now a lazy list.
                 androidx.test.uiautomator.UiScrollable(androidx.test.uiautomator.UiSelector().scrollable(true))
                     .scrollToBeginning(20)
-                device.wait(Until.findObject(By.text(context.getString(R.string.all_apps_disable))), 10000).click()
-                device.wait(Until.gone(By.text(context.getString(R.string.all_apps_active))), 5000)
+                device.wait(Until.findObject(By.text(context.getString(R.string.automatic_badge))), 10000).click()
+                device.wait(Until.gone(By.text(context.getString(R.string.automatic_badge))), 5000)
                 Assert.assertFalse("Task screen button revokes automatic access", r.settings.value.policy.allowAllApps)
                 main { r.gateway.start() }
                 val revoked = runBlocking {

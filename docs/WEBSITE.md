@@ -8,7 +8,7 @@ The landing page is in `site/` in the same repository as the Android app. It is 
 python3 -m http.server 8765 --bind 127.0.0.1 --directory site
 ```
 
-Open `http://127.0.0.1:8765`. The three task selectors change the illustrated phone conversation; they do not connect to or operate any actual device. The FAQ uses native HTML disclosure controls and works without JavaScript. Main content and links also remain available with scripts disabled. The page supports mobile layouts, keyboard focus and reduced motion.
+Open `http://127.0.0.1:8765`. The three screenshot selectors show the actual home screen, model settings and a completed practice task captured on the dedicated emulator. Tap the phone to view the selected image at full size. The home capture is from the 0.2.0 UI refresh (unchanged in 0.2.1); the settings and task captures are from 0.2.1. Images are copied without visual alteration and contain no account identifiers. They do not connect to or operate any actual device. The FAQ uses native HTML disclosure controls and works without JavaScript. Main content and links also remain available with scripts disabled. The page supports mobile layouts, keyboard focus and reduced motion.
 
 ## Deployment
 
@@ -16,7 +16,7 @@ Open `http://127.0.0.1:8765`. The three task selectors change the illustrated ph
 
 The source repository is `fazakis/magicphone`. Configure Pages to use **GitHub Actions**, then set its custom domain to **magicphone.org**. The custom domain is configured in the Pages API/settings; Actions deployments do not use a CNAME file as configuration. The canonical URL, sitemap and Open Graph metadata already use `https://magicphone.org/`.
 
-The call to action links to the 0.1.5 early-access GitHub Release, with source/build instructions still available. The release identifies the installable APK as debug signed. APKs are separate GitHub Release assets; the website workflow only publishes static site files.
+The call to action links to the 0.2.1 early-access GitHub Release, with source/build instructions still available. The release identifies the installable APK as debug signed. APKs are separate GitHub Release assets; the website workflow only publishes static site files.
 
 ## Cloudflare DNS
 
@@ -40,7 +40,7 @@ Source: [GitHub's custom domain documentation](https://docs.github.com/en/pages/
 
 - Edit `index.html` for copy, links, FAQs and metadata.
 - Edit `styles.css` for presentation and breakpoints.
-- Edit `script.js` for the three illustrative examples. Keep their status clearly illustrative.
+- Edit `script.js` for screenshot selection and accessible captions. Use authentic app captures in `site/assets/app-*.png`; do not imply that a selected processing speed was confirmed by the server.
 - Keep provider/permission/privacy claims consistent with the Android implementation and `docs/PRIVACY.md`.
 - Keep the source and MIT/Apache license links valid. Third-party dependencies are not relicensed.
 - Update social metadata and `sitemap.xml` if the public domain changes.
@@ -61,3 +61,10 @@ This website change does not change the Android app version or runtime behavior.
 The first public CI build passed compilation, unit tests, lint and release checks. Its Android 11 emulator exposed four assumptions in the previously Android-15-specific UI harness: a floating shortcut rather than Android 11's navigation button, a hardcoded Google speech package, and automatic shade dismissal (an API 31+ action). The harness now configures the version-appropriate shortcut, resolves an installed speech provider or explicitly skips that external-provider check when absent, and closes the shade manually on Android 11 while still asserting Pause/Resume/Stop. CI now runs both API 30 and API 35, with test-only notification permission setup and on-screen keyboard enabled. No production application behavior was changed to address these test-environment differences.
 
 The follow-up [hosted matrix run](https://github.com/fazakis/magicphone/actions/runs/36932298773) still failed: two shortcut tests on API 30 and five fixture/keyboard/voice tests on API 35. Build/core/lint/release checks passed. The remaining device failures are unresolved and are disclosed in the early-access APK release; the previously recorded local Android 15 checks are separate evidence.
+
+
+## Screenshot refresh for 0.2.1 (2026-10-02)
+
+The user requested previews closer to the real app. The hero now displays authentic, unaltered app screenshots, replacing the earlier HTML conversation illustration. Three selectors show Home, model/thinking settings and a completed practice task; the image links to its full-size original. The settings and result captions distinguish requested processing speed from actual server-reported speed. The phone frame preserves the screenshots' full aspect ratio, and decorative labels no longer cover app controls.
+
+Browser verification covered 1280 px desktop, 768 px tablet and 390/320 px phone widths, screenshot switching (including keyboard activation), selected state, full-size image destinations, FAQ expansion, image loading, local asset/anchor integrity and JavaScript syntax. No horizontal page overflow or browser warning/error was observed. The final 320 px check confirmed the whole phone fits and the caption does not overlap it. Preview captures are in ignored `artifacts/github-release-0.2.1/`. The release download points to v0.2.1.

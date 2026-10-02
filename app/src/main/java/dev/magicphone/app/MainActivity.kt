@@ -36,6 +36,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource as s
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,7 +82,8 @@ class MainActivity : ComponentActivity() {
         field("runState", runtime.agent.state.value)
         field("lastError", runtime.agent.error.value)
         field("versionName", BuildConfig.VERSION_NAME)
-        field("fastDecisions", settings.fastDecisions)
+        field("reasoningEffort", settings.profiles.find { it.id == settings.selected }?.reasoningEffort ?: "default")
+        field("serviceTier", settings.profiles.find { it.id == settings.selected }?.serviceTier ?: "default")
         field("modelCalls", runtime.agent.metrics.value.modelCalls)
         field("modelMillis", runtime.agent.metrics.value.modelMs)
         field("toolMillis", runtime.agent.metrics.value.toolMs)
@@ -91,7 +94,6 @@ class MainActivity : ComponentActivity() {
         field("providerKind", provider?.kind ?: "NONE")
         field("modelConfigured", provider?.model?.isNotBlank() == true)
         field("chatgptAccountSelected", settings.accounts.any { it.client == settings.activeAccount })
-        field("planOnly", settings.policy.planOnly)
         field("allowAllApps", settings.policy.allowAllApps)
         field("readableAppCount", settings.policy.apps.values.count { it.observe && !it.deny })
         field("mutableAppCount", settings.policy.apps.values.count { it.mutate && !it.deny })
@@ -187,27 +189,6 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MagicTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    val colors =
-        if (dark)
-            darkColorScheme(
-                primary = Color(0xffb8f3d1),
-                secondary = Color(0xfff5bc79),
-                background = Color(0xff0c2021),
-                surface = Color(0xff152d2d),
-            )
-        else
-            lightColorScheme(
-                primary = Color(0xff21624f),
-                secondary = Color(0xff975b20),
-                background = Color(0xfff6f6ee),
-                surface = Color(0xfffffff9),
-            )
-    MaterialTheme(colorScheme = colors, content = content)
-}
-
-@Composable
 fun Label(text: String) {
     Text(
         text,
@@ -228,10 +209,11 @@ fun Info(text: String) {
 
 @Composable
 fun BoxCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
         Column(
-            Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content,
         )
     }
@@ -252,6 +234,7 @@ fun Field(value: String, label: Int, change: (String) -> Unit, secret: Boolean =
         change,
         label = { Text(s(label)) },
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
         visualTransformation =
             if (secret) PasswordVisualTransformation()
             else androidx.compose.ui.text.input.VisualTransformation.None,
@@ -260,6 +243,7 @@ fun Field(value: String, label: Int, change: (String) -> Unit, secret: Boolean =
 
 fun errorResource(code: String): Int =
     when {
+        code == "unsupported_model_setting" -> R.string.unsupported_model_setting
         code == "voice_unavailable" -> R.string.voice_unavailable
         code == "voice_empty" -> R.string.voice_empty
         code == "voice_chat_changed" -> R.string.voice_chat_changed
@@ -267,7 +251,7 @@ fun errorResource(code: String): Int =
         code == "accessibility_missing" -> R.string.error_accessibility
         code == "protected_control" -> R.string.error_protected_control
         code in setOf("screen_uncertain", "capture_uncertain") -> R.string.error_screen_uncertain
-        code in setOf("app_not_allowed", "plan_only", "mcp_consent", "approval_denied") ->
+        code in setOf("app_not_allowed", "mcp_consent", "approval_denied") ->
             R.string.error_policy
         code in
             setOf(
@@ -310,7 +294,7 @@ fun stateResource(state: RunState): Int = when (state) {
             RunState.INTERRUPTED -> R.string.state_interrupted
         }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AppUi(r: AppRuntime, focusRequest: Long, shared: String, uri: Uri?, consumed: () -> Unit) {
     val settings by r.settings.collectAsStateWithLifecycle()
@@ -377,11 +361,13 @@ fun AppUi(r: AppRuntime, focusRequest: Long, shared: String, uri: Uri?, consumed
         return
     }
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = {
-                    Column {
-                        Text("MagicPhone", fontWeight = FontWeight.Bold)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("MagicPhone", style = MaterialTheme.typography.titleLarge)
                         Text(
                             stateLabel(state),
                             style = MaterialTheme.typography.labelMedium,
@@ -395,13 +381,14 @@ fun AppUi(r: AppRuntime, focusRequest: Long, shared: String, uri: Uri?, consumed
                         draft.value = ""
                         tab = 0
                     }) {
-                        Text(s(R.string.new_chat))
+                        AppIcon(R.drawable.ic_plus, description = s(R.string.new_chat))
                     }
-                    Button(
+                    FilledTonalButton(
                         { r.stop() },
                         colors =
-                            ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error
+                            ButtonDefaults.filledTonalButtonColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
                             ),
                     ) {
                         Text(s(R.string.stop))
@@ -411,21 +398,26 @@ fun AppUi(r: AppRuntime, focusRequest: Long, shared: String, uri: Uri?, consumed
             )
         },
         bottomBar = {
-            NavigationBar {
+            if (!WindowInsets.isImeVisible) Surface(
+                Modifier.navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) { NavigationBar(containerColor = Color.Transparent, windowInsets = WindowInsets(0, 0, 0, 0)) {
                 listOf(R.string.task, R.string.history, R.string.library, R.string.settings)
                     .forEachIndexed { index, title ->
                         NavigationBarItem(
                             selected = tab == index,
                             onClick = { tab = index },
-                            icon = { Text(listOf("✦", "◷", "▤", "⚙")[index], fontSize = 22.sp) },
+                            icon = { AppIcon(listOf(R.drawable.ic_chat, R.drawable.ic_history, R.drawable.ic_library, R.drawable.ic_settings)[index]) },
                             label = { Text(s(title)) },
+                            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primaryContainer),
                         )
                     }
-            }
+            } }
         },
     ) { padding ->
         Box(Modifier.padding(padding).consumeWindowInsets(padding).imePadding()
-            .fillMaxSize().padding(horizontal = 18.dp)) {
+            .fillMaxSize().padding(horizontal = 20.dp)) {
             when (tab) {
                 0 -> TaskPage(r, draft, images, { images = it }, focusRequest)
                 1 -> HistoryPage(r) { tab = 0 }
@@ -478,6 +470,7 @@ fun TaskPage(
     val settings by r.settings.collectAsStateWithLifecycle()
     val usage by r.agent.usage.collectAsStateWithLifecycle()
     val metrics by r.agent.metrics.collectAsStateWithLifecycle()
+    val modelInfo by r.agent.modelInfo.collectAsStateWithLifecycle()
     val actions by r.agent.actions.collectAsStateWithLifecycle()
     val conversation = data.conversations.find { it.id == current }
     val listState = rememberLazyListState()
@@ -490,12 +483,12 @@ fun TaskPage(
             contentPadding = PaddingValues(vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item(key = "intro") {
-                Label(conversation?.title ?: s(R.string.new_task))
-                if (conversation?.messages.isNullOrEmpty()) Info(s(R.string.no_messages))
-                if (settings.policy.planOnly) AssistChip(onClick = {}, label = { Text(s(R.string.plan_only)) })
-                if (settings.policy.allowAllApps) BoxCard {
-                    Text(s(R.string.all_apps_active), fontWeight = FontWeight.Bold)
-                    TextButton({ r.setAllowAllApps(false) }) { Text(s(R.string.all_apps_disable)) }
+                if (conversation?.messages.isNullOrEmpty()) WelcomeTask { draft.value = it }
+                else Label(conversation?.title ?: s(R.string.new_task))
+                if (settings.policy.allowAllApps) {
+                    AssistChip(onClick = { r.setAllowAllApps(false) },
+                        label = { Text(s(R.string.automatic_badge)) },
+                        leadingIcon = { AppIcon(R.drawable.ic_check, modifier = Modifier.size(16.dp)) })
                 }
                 if (conversation?.state == RunState.INTERRUPTED)
                     BoxCard {
@@ -510,18 +503,30 @@ fun TaskPage(
                     }
             }
             items(conversation?.messages?.takeLast(60).orEmpty(), key = { it.id }) { msg ->
-                BoxCard {
-                    Text(if (msg.role == "user") "●" else "✦", color = MaterialTheme.colorScheme.primary)
-                    if (msg.role == "assistant") Info(s(R.string.assistant_report))
-                    Text(msg.text)
-                    TextButton({ r.branch(conversation!!.id, msg.id) }) { Text(s(R.string.branch)) }
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = if (msg.role == "user") Alignment.End else Alignment.Start) {
+                    Surface(color = if (msg.role == "user") MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp,
+                            bottomEnd = if (msg.role == "user") 6.dp else 24.dp,
+                            bottomStart = if (msg.role == "user") 24.dp else 6.dp),
+                        modifier = Modifier.fillMaxWidth(if (msg.role == "user") 0.9f else 1f)) {
+                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (msg.role != "user") Text("MagicPhone", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                            SelectionContainer { Text(msg.text, style = MaterialTheme.typography.bodyLarge) }
+                        }
+                    }
+                    TextButton({ r.branch(conversation!!.id, msg.id) }, contentPadding = PaddingValues(horizontal = 8.dp)) {
+                        Text(s(R.string.branch), style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
             item(key = "status") {
                 if (actions.isNotEmpty())
                     BoxCard {
-                        Text(s(R.string.action_results), fontWeight = FontWeight.Bold)
-                        actions.takeLast(10).forEach {
+                        var expanded by remember { mutableStateOf(false) }
+                        TextButton({ expanded = !expanded }, contentPadding = PaddingValues(0.dp)) {
+                            Text(s(R.string.action_count, actions.size), style = MaterialTheme.typography.titleMedium)
+                        }
+                        if (expanded) actions.takeLast(10).forEach {
                             Text(
                                 "${it.operation} · ${it.app}\n${it.status}",
                                 style = MaterialTheme.typography.bodySmall,
@@ -541,6 +546,7 @@ fun TaskPage(
                         Text(question)
                     }
                 if (error.isNotEmpty()) Text(s(errorResource(error)), color = MaterialTheme.colorScheme.error)
+                modelInfo?.let { ModelResponseInfo(it) }
                 if (usage.isNotEmpty()) Info(usage)
                 if (metrics.elapsedMs > 0 && state in setOf(RunState.COMPLETED, RunState.FAILED, RunState.STOPPED))
                     Info(s(R.string.run_timing_summary, metrics.elapsedMs / 1000.0, metrics.modelCalls,
@@ -605,68 +611,51 @@ private fun TaskComposer(r: AppRuntime, draft: MutableState<String>, images: Lis
                         .onFailure { r.notice.value = "image_invalid" }
                 }
         }
-    OutlinedTextField(
-        draft.value,
-        { draft.value = it },
-        Modifier.fillMaxWidth().focusRequester(focusRequester),
-        label = { Text(s(R.string.ask_task)) },
-        placeholder = { Text(s(R.string.task_hint)) },
-        minLines = 1,
-        maxLines = 4,
-        trailingIcon = {
-            IconButton(onClick = {
-                r.pauseForChat()
-                keyboard?.hide()
-                voiceConversation = r.current.value
-                voicePending = true
-                try {
-                    voice.launch(Unit)
-                } catch (_: ActivityNotFoundException) {
-                    voicePending = false
-                    r.notice.value = "voice_unavailable"
-                } catch (_: SecurityException) {
-                    voicePending = false
-                    r.notice.value = "voice_unavailable"
-                }
-            }, enabled = !voicePending) {
-                Icon(painterResource(R.drawable.ic_mic), contentDescription = s(R.string.voice_input))
+    Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (images.isNotEmpty()) TextButton({ setImages(emptyList()) }) {
+                Text("${s(R.string.remove_image)} (${images.size})")
             }
-        },
-    )
-    if (images.isNotEmpty())
-        TextButton({ setImages(emptyList()) }) {
-            Text("${s(R.string.remove_image)} (${images.size})")
-        }
-    if (settings.secondary.isNotBlank())
-        Toggle(s(R.string.use_secondary), secondary) { secondary = it }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton({ picker.launch("image/*") }) { Text(s(R.string.attach)) }
-        Button(
-            {
-                r.start(draft.value, images, secondary)
-                draft.value = ""
-                setImages(emptyList())
-            },
-            enabled = draft.value.isNotBlank(),
-        ) {
-            Text(
-                s(
-                    if (
-                        state in
-                            setOf(
-                                RunState.WAITING_USER,
-                                RunState.ACTING,
-                                RunState.PLANNING,
-                                RunState.PAUSED,
-                                RunState.WAITING_APPROVAL,
-                            )
-                    )
-                        R.string.send
-                    else R.string.start
-                )
+            OutlinedTextField(
+                draft.value, { draft.value = it },
+                Modifier.fillMaxWidth().focusRequester(focusRequester),
+                placeholder = { Text(s(R.string.ask_task)) },
+                minLines = 1, maxLines = 4,
+                shape = RoundedCornerShape(20.dp),
+                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color.Transparent,
+                    unfocusedBorderColor = Color.Transparent),
+                trailingIcon = {
+                    IconButton(onClick = {
+                        r.pauseForChat()
+                        keyboard?.hide()
+                        voiceConversation = r.current.value
+                        voicePending = true
+                        try { voice.launch(Unit) }
+                        catch (_: ActivityNotFoundException) { voicePending = false; r.notice.value = "voice_unavailable" }
+                        catch (_: SecurityException) { voicePending = false; r.notice.value = "voice_unavailable" }
+                    }, enabled = !voicePending) {
+                        Icon(painterResource(R.drawable.ic_mic), contentDescription = s(R.string.voice_input))
+                    }
+                },
             )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                IconButton({ picker.launch("image/*") }) { AppIcon(R.drawable.ic_attach, description = s(R.string.attach)) }
+                val selected = settings.profiles.find { it.id == settings.selected }
+                Text(selected?.modelLabel().orEmpty().ifBlank { s(R.string.choose_model) },
+                    Modifier.weight(1f).padding(end = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button({ r.start(draft.value, images, secondary); draft.value = ""; setImages(emptyList()) },
+                    enabled = draft.value.isNotBlank(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)) {
+                    Text(s(if (state in setOf(RunState.WAITING_USER, RunState.ACTING, RunState.PLANNING,
+                        RunState.PAUSED, RunState.WAITING_APPROVAL)) R.string.send else R.string.start))
+                    Spacer(Modifier.width(6.dp))
+                    AppIcon(R.drawable.ic_send, modifier = Modifier.size(18.dp))
+                }
+            }
         }
     }
+    if (settings.secondary.isNotBlank()) Toggle(s(R.string.use_secondary), secondary) { secondary = it }
     NotificationAccess(r)
     if (state !in setOf(RunState.IDLE, RunState.COMPLETED, RunState.STOPPED, RunState.FAILED))
         OutlinedButton({ if (state == RunState.PAUSED) r.agent.resume() else r.agent.pause() }) {
@@ -676,7 +665,7 @@ private fun TaskComposer(r: AppRuntime, draft: MutableState<String>, images: Lis
 }
 
 @Composable
-private fun NotificationAccess(r: AppRuntime, showHelp: Boolean = false) {
+fun NotificationAccess(r: AppRuntime, showHelp: Boolean = false) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var enabled by remember { mutableStateOf(TaskNotifications.enabled(context)) }
     var permissionAsked by rememberSaveable { mutableStateOf(false) }
@@ -729,222 +718,6 @@ fun HistoryPage(r: AppRuntime, open: () -> Unit) {
                 }
             }
         }
-    }
-}
-
-@Composable
-fun SettingsPage(r: AppRuntime) {
-    val settings by r.settings.collectAsStateWithLifecycle()
-    val connected by r.connected.collectAsStateWithLifecycle()
-    val models by r.models.collectAsStateWithLifecycle()
-    val busy by r.busy.collectAsStateWithLifecycle()
-    val context = androidx.compose.ui.platform.LocalContext.current
-    fun change(value: Settings) {
-        r.stop()
-        r.saveSettings(value)
-    }
-    var appQuery by rememberSaveable { mutableStateOf("") }
-    val apps by produceState<List<Pair<String, String>>>(emptyList(), r) {
-        value = withContext(Dispatchers.IO) { r.launchable() }
-    }
-    val filteredApps = remember(apps, appQuery) {
-        apps.filter { it.first != context.packageName &&
-            (it.second.contains(appQuery, true) || it.first.contains(appQuery, true)) }
-    }
-    LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(14.dp),
-        contentPadding = PaddingValues(vertical = 12.dp)) {
-        item(key = "preferences") { Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Info("MagicPhone ${BuildConfig.VERSION_NAME}")
-                BoxCard {
-                    Text(s(R.string.all_apps_title), fontWeight = FontWeight.Bold)
-                    Info(s(R.string.all_apps_help))
-                    Button({ r.setAllowAllApps(!settings.policy.allowAllApps) }) {
-                        Text(s(if (settings.policy.allowAllApps) R.string.all_apps_disable else R.string.all_apps_enable))
-                    }
-                    if (settings.policy.allowAllApps) Info(s(R.string.all_apps_active))
-                }
-                Label(s(R.string.permissions))
-                BoxCard {
-                    Text(
-                        s(if (connected) R.string.connected else R.string.disconnected),
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Info(s(R.string.permission_help))
-                    OutlinedButton({
-                        context.startActivity(Intent(AndroidSettings.ACTION_ACCESSIBILITY_SETTINGS))
-                    }) {
-                        Text(s(R.string.accessibility))
-                    }
-                    NotificationAccess(r, showHelp = true)
-                    Info(s(R.string.voice_help))
-                    Toggle(s(R.string.plan_only), settings.policy.planOnly) {
-                        change(settings.copy(policy = settings.policy.copy(
-                            planOnly = it,
-                            allowAllApps = if (it) false else settings.policy.allowAllApps,
-                        )))
-                    }
-                    Info(s(R.string.plan_help))
-                    Toggle(s(R.string.fast_decisions), settings.fastDecisions) {
-                        change(settings.copy(fastDecisions = it))
-                    }
-                    Info(s(R.string.fast_decisions_help))
-                }
-                Label(s(R.string.providers))
-                BoxCard {
-                    Button(
-                        {
-                            r.signIn({ url ->
-                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                            })
-                        },
-                        enabled = !busy,
-                    ) {
-                        Text(s(if (busy) R.string.busy else R.string.continue_chatgpt))
-                    }
-                    Info(s(R.string.signin_note))
-                    settings.accounts.forEach { a ->
-                        Text("${a.email} · ${a.client.takeLast(8)}")
-                        Row {
-                            TextButton({
-                                r.stop()
-                                r.saveSettings(settings.copy(activeAccount = a.client, selected = "chatgpt"))
-                                r.models.value = emptyList()
-                            }) {
-                                Text(s(R.string.select))
-                            }
-                            TextButton({
-                                r.signIn(
-                                    { url ->
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                                    },
-                                    a.client,
-                                )
-                            }) {
-                                Text(s(R.string.continue_chatgpt))
-                            }
-                            TextButton({ r.logout(a.client) }) { Text(s(R.string.signout)) }
-                        }
-                    }
-                    settings.profiles.forEach { p ->
-                        HorizontalDivider()
-                        Text("${p.name} · ${p.model.ifEmpty { "—" }}", fontWeight = FontWeight.Bold)
-                        Info(if (p.kind == ProviderKind.MOCK) "Local" else p.endpoint)
-                        Row {
-                            TextButton({
-                                change(settings.copy(selected = p.id))
-                                r.models.value = emptyList()
-                            }) {
-                                Text(s(if (settings.selected == p.id) R.string.active else R.string.select))
-                            }
-                            TextButton({ change(settings.copy(secondary = p.id)) }) {
-                                Text(s(R.string.secondary))
-                            }
-                            TextButton({
-                                r.stop()
-                                r.vault.delete("secret-${p.id}")
-                                change(
-                                    settings.copy(
-                                        profiles = settings.profiles.filterNot { it.id == p.id },
-                                        selected = if (settings.selected == p.id) "" else settings.selected,
-                                        secondary = if (settings.secondary == p.id) "" else settings.secondary,
-                                    )
-                                )
-                            }) {
-                                Text(s(R.string.delete))
-                            }
-                        }
-                        if (settings.selected == p.id && p.kind != ProviderKind.MOCK) {
-                            var model by remember(p.id, p.model) { mutableStateOf(p.model) }
-                            Field(model, R.string.model, { model = it })
-                            Button({
-                                change(
-                                    settings.copy(
-                                        profiles =
-                                            settings.profiles.map {
-                                                if (it.id == p.id) it.copy(model = model) else it
-                                            }
-                                    )
-                                )
-                            }) {
-                                Text(s(R.string.save))
-                            }
-                            TextButton({ r.discoverModels() }) { Text(s(R.string.discover)) }
-                            models.forEach { m ->
-                                TextButton({
-                                    change(
-                                        settings.copy(
-                                            profiles =
-                                                settings.profiles.map {
-                                                    if (it.id == p.id) it.copy(model = m.id) else it
-                                                }
-                                        )
-                                    )
-                                }) {
-                                    Text(m.name)
-                                }
-                            }
-                        }
-                    }
-                }
-                ProviderEditor(r)
-                BoxCard {
-                    Text(s(R.string.practice), fontWeight = FontWeight.Bold)
-                    Info(s(R.string.practice_help))
-                    Button({ r.configurePractice() }) { Text(s(R.string.practice)) }
-                }
-        } }
-        item(key = "app-search") {
-            Label(s(R.string.app_access))
-            Field(appQuery, R.string.search, { appQuery = it })
-        }
-        items(filteredApps, key = { it.first }) { (pkg, name) ->
-            val rule = settings.policy.apps[pkg] ?: AppRule()
-            fun setRule(value: AppRule) =
-                change(
-                    settings.copy(
-                        policy = settings.policy.copy(apps = settings.policy.apps + (pkg to value))
-                    )
-                )
-            BoxCard {
-                Text(name, fontWeight = FontWeight.Bold)
-                Info(pkg)
-                if (settings.policy.allowAllApps) {
-                    Info(s(R.string.all_apps_rule_help))
-                } else {
-                    Toggle(s(R.string.observe), rule.observe) { setRule(rule.copy(observe = it)) }
-                    Toggle(s(R.string.mutate), rule.mutate) { setRule(rule.copy(mutate = it)) }
-                }
-                Toggle(s(R.string.deny), rule.deny) { setRule(rule.copy(deny = it)) }
-                if (!settings.policy.allowAllApps && rule.observe && rule.mutate && !rule.deny) {
-                    Info(s(R.string.grant_help))
-                    TextButton({
-                        change(
-                            settings.copy(
-                                policy =
-                                    settings.policy.copy(
-                                        grants =
-                                            settings.policy.grants +
-                                                Grant(
-                                                    pkg,
-                                                    setOf(Op.TAP, Op.SCROLL, Op.OPEN),
-                                                    System.currentTimeMillis() + 300000,
-                                                )
-                                    )
-                            )
-                        )
-                    }) {
-                        Text(s(R.string.grant))
-                    }
-                }
-            }
-        }
-        item(key = "extensions-data") { Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                TextButton({ change(settings.copy(policy = settings.policy.copy(grants = emptyList(), allowAllApps = false))) }) {
-                    Text(s(R.string.revoke))
-                }
-                McpPage(r)
-                DataPage(r)
-        } }
     }
 }
 

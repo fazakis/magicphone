@@ -203,7 +203,7 @@ class ProtocolTest {
         val gate =
             Gateway(
                 Policy("own.app"),
-                { PolicyConfig(apps = mapOf("test.app" to AppRule(true, true)), planOnly = false) },
+                { PolicyConfig(apps = mapOf("test.app" to AppRule(true, true))) },
                 object : DevicePort {
                     override suspend fun inspect(app: String) = screen
 
@@ -235,7 +235,7 @@ class ProtocolTest {
         val gate =
             Gateway(
                 Policy("own.app"),
-                { PolicyConfig(planOnly = false) },
+                { PolicyConfig() },
                 object : DevicePort {
                     override suspend fun inspect(app: String) = Screen()
 

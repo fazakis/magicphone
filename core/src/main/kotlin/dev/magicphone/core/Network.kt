@@ -29,6 +29,10 @@ data class Profile(
     val localOptIn: Boolean = false,
     val images: Boolean = false,
     val functions: Boolean = true,
+    val reasoningEffort: String? = null,
+    val serviceTier: String? = null,
+    val modelChoice: ModelChoice? = null,
+    val manualModelOptions: Boolean = false,
 )
 
 data class BoundSecret(val origin: String, val value: String)

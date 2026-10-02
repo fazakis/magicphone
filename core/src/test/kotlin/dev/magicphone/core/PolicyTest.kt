@@ -8,7 +8,7 @@ import kotlinx.coroutines.test.*
 class PolicyTest {
     private val pkg = "test.fixture"
     private val policy = Policy("dev.magicphone.app")
-    private val config = PolicyConfig(apps = mapOf(pkg to AppRule(true, true)), planOnly = false)
+    private val config = PolicyConfig(apps = mapOf(pkg to AppRule(true, true)))
     private val screen =
         Screen(
             "s1",
@@ -29,7 +29,7 @@ class PolicyTest {
 
     @Test
     fun automaticAccessDefaultsOffInExistingSettings() {
-        val old = JsonCodec.decodeFromString(PolicyConfig.serializer(), """{"planOnly":false}""")
+        val old = JsonCodec.decodeFromString(PolicyConfig.serializer(), """{}""")
         assertFalse(old.allowAllApps)
         assertEquals(Decision.Deny("app_not_allowed"), policy.decide(tap(), screen, old, 0))
         assertEquals(Decision.Approval, policy.decide(tap(), screen, config, 0))
@@ -37,7 +37,7 @@ class PolicyTest {
 
     @Test
     fun automaticAccessAllowsUnlistedAppsAndOrdinaryActions() {
-        val automatic = PolicyConfig(planOnly = false, allowAllApps = true)
+        val automatic = PolicyConfig(allowAllApps = true)
         val actions = listOf(
             Action(Op.OBSERVE, pkg), Action(Op.OPEN, pkg), tap(),
             Action(Op.TAP, pkg, "s1", x = 30, y = 40),
@@ -58,7 +58,6 @@ class PolicyTest {
         val blocked = automatic.copy(apps = mapOf(pkg to AppRule(true, true, true)))
         assertEquals(Decision.Deny("app_not_allowed"), policy.decide(tap(), screen, blocked, 0))
         assertFailsWith<SafeFailure> { policy.preflight(Action(Op.OBSERVE, pkg), blocked) }
-        assertEquals(Decision.Deny("plan_only"), policy.decide(tap(), screen, automatic.copy(planOnly = true), 0))
         for (p in listOf("dev.magicphone.app", "com.android.settings", "com.android.systemui", "com.google.android.permissioncontroller")) {
             assertTrue(policy.appRule(p, automatic).deny)
             assertEquals(Decision.Deny("manual_security"), policy.decide(Action(Op.OPEN, p), screen, automatic, 0))
@@ -80,7 +79,7 @@ class PolicyTest {
 
     @Test
     fun automaticGatewaySkipsApprovalsAndRevocationRestoresThem() = runTest {
-        var active = PolicyConfig(planOnly = false, allowAllApps = true)
+        var active = PolicyConfig(allowAllApps = true)
         val device = Device(screen)
         var requests = 0
         val gate = Gateway(policy, { active }, device, object : ApprovalPort {
@@ -133,12 +132,12 @@ class PolicyTest {
     }
 
     @Test
-    fun planOnlyBlocksEveryUnadvertisedMutation() {
+    fun readOnlyAppsBlockEveryUnadvertisedMutation() {
         Op.entries
             .filter { it.mutates }
             .forEach { op ->
                 assertIs<Decision.Deny>(
-                    policy.decide(tap().copy(op = op), screen, config.copy(planOnly = true), 0),
+                    policy.decide(tap().copy(op = op), screen, config.copy(apps = mapOf(pkg to AppRule(true, false))), 0),
                     op.name,
                 )
             }
@@ -146,7 +145,7 @@ class PolicyTest {
 
     @Test
     fun emptyPlanNeverChangesPolicy() {
-        val before = config.copy(planOnly = true)
+        val before = config.copy(apps = mapOf(pkg to AppRule(true, false)))
         policy.decide(Action(Op.PLAN), screen, before, 0)
         assertIs<Decision.Deny>(policy.decide(tap(), screen, before, 0))
     }
@@ -356,12 +355,12 @@ class PolicyTest {
     }
 
     @Test
-    fun batchesCannotBypassPlanMode() = runTest {
+    fun batchesCannotBypassAppPermissions() = runTest {
         val device = Device(screen)
         val gate =
             Gateway(
                 policy,
-                { config.copy(planOnly = true) },
+                { config.copy(apps = mapOf(pkg to AppRule(true, false))) },
                 device,
                 object : ApprovalPort {
                     override suspend fun request(approval: Approval) = true
@@ -383,7 +382,7 @@ class PolicyTest {
                 device,
                 object : ApprovalPort {
                     override suspend fun request(approval: Approval): Boolean {
-                        c = c.copy(planOnly = true)
+                        c = c.copy(apps = mapOf(pkg to AppRule(true, false)))
                         return true
                     }
                 },
@@ -394,7 +393,7 @@ class PolicyTest {
     }
 
     @Test
-    fun mcpConsentAndPlanEnforced() {
+    fun mcpConsentAndRevocationEnforced() {
         val a = Action(Op.MCP, server = "s", tool = "t")
         assertIs<Decision.Deny>(policy.decide(a, screen, config, 0))
         assertEquals(
@@ -405,7 +404,7 @@ class PolicyTest {
             policy.decide(
                 a,
                 screen,
-                config.copy(planOnly = true, mcp = mapOf("s" to setOf("t"))),
+                config.copy(mcp = emptyMap()),
                 0,
             )
         )

@@ -34,7 +34,7 @@ class ScreenRecoveryTest {
         }
     }
     private fun gateway(device: Device, automatic: Boolean = true, approve: suspend () -> Boolean = { error("No approval expected") }) = Gateway(
-        Policy("own.app"), { PolicyConfig(apps = mapOf(pkg to AppRule(true, true)), planOnly = false, allowAllApps = automatic) },
+        Policy("own.app"), { PolicyConfig(apps = mapOf(pkg to AppRule(true, true)), allowAllApps = automatic) },
         device, object : ApprovalPort { override suspend fun request(approval: Approval) = approve() },
     )
 
