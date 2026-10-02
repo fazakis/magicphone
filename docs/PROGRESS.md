@@ -1,6 +1,8 @@
 # Implementation progress and verification
 
-Repository: `~/magicphone`, branch `codex/magicphone`. The user-owned `INSTRUCTIONS.md` is ignored. Original code is MIT OR Apache-2.0, Copyright 2026 Nikos Fazakis. Repository and GitHub Pages publication are now authorized; no production signing key has been used.
+Repository: `~/magicphone`, branch `codex/magicphone`. The user-owned `INSTRUCTIONS.md` is ignored. Original code is MIT OR Apache-2.0. Repository and GitHub Pages publication are now authorized; no production signing key has been used.
+
+**Public documentation cleanup (2026-10-02).** Removed personal bylines and repeated attribution from the README, website and explanatory documentation, and removed operational domain configuration details. Copyright and license notices remain in the license files and source headers. Checked the updated text, local website links/anchors and diff; this is a documentation-only change.
 
 ## Completed implementation stages
 
@@ -78,7 +80,7 @@ These are recorded verification limits, not hidden placeholder implementations. 
 
 ## Website and MIT option
 
-Added an MIT licensing option while retaining Apache-2.0, copyright attribution and third-party notices. The original-source SPDX identifiers, README and contributing guidance consistently use `MIT OR Apache-2.0`. Added the static `site/` landing page, interactive task illustrations, setup and privacy copy, FAQ, original social artwork, and pinned GitHub Pages workflow. The user authorized publication using their GitHub CLI; see [website deployment](WEBSITE.md) for the latest public URLs, checks and DNS status. Website changes do not alter Android behavior or the 0.1.5 version.
+Added an MIT licensing option while retaining Apache-2.0, copyright attribution and third-party notices. The original-source SPDX identifiers, README and contributing guidance consistently use `MIT OR Apache-2.0`. Added the static `site/` landing page, interactive task illustrations, setup and privacy copy, FAQ, original social artwork, and pinned GitHub Pages workflow. The user authorized publication using their GitHub CLI; see [website deployment](WEBSITE.md) for the public URLs and website checks. Website changes do not alter Android behavior or the 0.1.5 version.
 
 Publication CI found Android-version and installed-provider assumptions in the UI harness. Updated the test setup for Android 11 navigation shortcuts and manual notification-shade closure; native speech availability is discovered rather than tied to the QA image's Google package. Added API 35 alongside API 30 to CI. Build/lint/core/release checks passed on the first public run; final matrix results are recorded in the website verification notes.
 
@@ -86,4 +88,4 @@ Publication CI found Android-version and installed-provider assumptions in the U
 
 The user authorized uploading the latest APK to GitHub. Version 0.1.5 is the exact previously verified development APK, with SHA-256 `71b9ae71d3b080ccc86908dda4123503a3dca938b5c2d2cff0386603f18e9f31` and the same debug certificate as the recent QA updates. The build host's app/core runtime sources match the published sources apart from SPDX license headers. No runtime changes or re-signing were introduced for publication. Release assets include checksum/signing information and all license notices. The landing page links to the early-access release.
 
-Hosted run [36932298773](https://github.com/fazakis/magicphone/actions/runs/36932298773) passed the build job but failed two API 30 shortcut tests and five API 35 fixture/keyboard/voice tests. Those failures remain unresolved; they do not invalidate the separately recorded local 10-test result, and the prerelease notes disclose both results. HTTPS is now enforced for magicphone.org after the certificate was approved for the apex and www names.
+Hosted run [36932298773](https://github.com/fazakis/magicphone/actions/runs/36932298773) passed the build job but failed two API 30 shortcut tests and five API 35 fixture/keyboard/voice tests. Those failures remain unresolved; they do not invalidate the separately recorded local 10-test result, and the prerelease notes disclose both results. The website is available over HTTPS.

@@ -1,6 +1,6 @@
 # MagicPhone
 
-**Your phone. Your say.** An original, open-source Android assistant by Nikos Fazakis.
+**Your phone. Your say.** An open-source Android assistant.
 
 Describe a task and let MagicPhone operate your apps. By default, you select applications and approve actions; an optional **Allow all apps without asking** button enables automatic app access and execution. MagicPhone runs on an ordinary, non-rooted Android 11+ phone using Android Accessibility APIs. Day-to-day operation requires no computer, ADB, or developer-operated backend. Cloud models receive selected task/screen context; this is **not an entirely offline assistant**. A deterministic practice mode makes no model requests.
 
@@ -10,7 +10,7 @@ This is an early implementation, not a claim of universal third-party-app safety
 
 ## Website
 
-The landing page lives in [`site/`](site/) in this repository and deploys independently with GitHub Pages. The custom domain is [magicphone.org](https://magicphone.org). See [website development and DNS setup](docs/WEBSITE.md).
+The landing page lives in [`site/`](site/) in this repository and deploys independently with GitHub Pages. The custom domain is [magicphone.org](https://magicphone.org). See [website development](docs/WEBSITE.md).
 
 ## Build
 
@@ -77,7 +77,7 @@ Encrypted backups use a passphrase of at least 12 characters. Export excludes al
 - [Release and signing](docs/RELEASING.md)
 - [Contributing](CONTRIBUTING.md), [security](SECURITY.md), [third-party notices](THIRD_PARTY_NOTICES.md)
 
-Functional inspiration: [Fox-Islam/android-agent](https://github.com/Fox-Islam/android-agent). MagicPhone is independently implemented; no code, assets or documentation from that project were copied. There is no affiliation. Original source, interface, icon and website are available under your choice of the [MIT License](LICENSE) or [Apache-2.0](LICENSE-APACHE), Copyright 2026 Nikos Fazakis. Dependencies retain their own licenses.
+Functional inspiration: [Fox-Islam/android-agent](https://github.com/Fox-Islam/android-agent). MagicPhone is independently implemented; no code, assets or documentation from that project were copied. There is no affiliation. Original source, interface, icon and website are available under your choice of the [MIT License](LICENSE) or [Apache-2.0](LICENSE-APACHE). Dependencies retain their own licenses.
 
 ### Model and thinking settings
 

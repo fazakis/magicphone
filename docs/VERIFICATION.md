@@ -48,7 +48,7 @@ Debug app and fixture signer DN: `C=US, O=Android, CN=Android Debug`.
 
 Certificate SHA-256: `276609e12a27cd44ea76695a91e5c8e0a312df27b3bd5498785018e6ce001f3c`.
 
-This is the SSH build machine's ordinary Android debug key, not a Nikos Fazakis production/distribution certificate. Its private key was not copied. The release APK has no signer and must be signed by the distributor before installation. Raw verification output is in `artifacts/debug-signatures.txt` and `artifacts/release-signature-check.txt`.
+This is the SSH build machine's ordinary Android debug key, not a production/distribution certificate. Its private key was not copied. The release APK has no signer and must be signed by the distributor before installation. Raw verification output is in `artifacts/debug-signatures.txt` and `artifacts/release-signature-check.txt`.
 
 | File, relative to repository | Bytes | SHA-256 |
 |---|---:|---|
