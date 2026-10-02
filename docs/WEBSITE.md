@@ -54,3 +54,7 @@ Browser verification covered 1280 px desktop, 768 px tablet and 390/320 px phone
 ## 0.2.2 disclaimer and release links (2026-10-02)
 
 The install/download links now target v0.2.2. The new `disclaimer.html` carries the approved open-source automation notice, linked from the footer and install section and included in the sitemap. Desktop and 320 px phone checks confirm readable layout, no horizontal overflow, valid Home/license links and working homepage-to-disclaimer navigation. The initial narrow-header overlap was fixed. Existing authentic app screenshots remain unchanged. No DNS operational details or personal marketing bylines were reintroduced.
+
+## 0.2.3 download update (2026-10-02)
+
+Homepage version and download links now target v0.2.3. Existing screenshots, disclaimer and domain configuration are unchanged.

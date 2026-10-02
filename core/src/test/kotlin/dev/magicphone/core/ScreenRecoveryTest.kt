@@ -4,6 +4,7 @@ package dev.magicphone.core
 import kotlin.test.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.*
+import kotlinx.coroutines.flow.collect
 import kotlinx.serialization.json.*
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -104,16 +105,63 @@ class ScreenRecoveryTest {
     }
 
     @Test
-    fun recoveryIsBoundedWhenScreenRemainsUncertain() = runTest {
+    fun unreadableScreenUsesNormalRunBudgetInsteadOfFailingAfterThreeReads() = runTest {
         val device = Device(screen("now").copy(mixed = true))
         val agent = Agent(gateway(device), { _, _ -> })
         var requests = 0
         agent.start(backgroundScope, provider { requests++; reply(Action(Op.OBSERVE, pkg)) }, "Read")
         runCurrent()
         assertEquals(RunState.FAILED, agent.state.value)
-        assertEquals("screen_uncertain", agent.error.value)
-        assertEquals(4, requests)
+        assertEquals("run_budget", agent.error.value)
+        assertEquals(60, requests)
         assertTrue(device.executed.isEmpty())
+    }
+
+    @Test
+    fun repeatedReadFailuresRecoverWithoutDelayOrUserIntervention() = runTest {
+        val device = Device(screen("now").copy(mixed = true))
+        val persisted = mutableListOf<RunState>()
+        val agent = Agent(gateway(device), { _, state -> persisted += state })
+        var notices = 0
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { agent.screenReadNotices.collect { notices++ } }
+        var requests = 0
+        agent.start(backgroundScope, provider { input ->
+            val round = requests++
+            if (round in 1..5) assertTrue(input.last().toString().contains("observation_unavailable"))
+            when {
+                round < 5 -> reply(Action(Op.OBSERVE, pkg))
+                round == 5 -> { device.screen = screen("fresh"); reply(Action(Op.OBSERVE, pkg)) }
+                else -> reply(Action(Op.COMPLETE, text = "Read the visible counter"))
+            }
+        }, "Read")
+        runCurrent()
+        assertEquals(RunState.COMPLETED, agent.state.value)
+        assertEquals("", agent.error.value)
+        assertEquals(1, notices)
+        assertEquals(0, testScheduler.currentTime) // No added wait, backoff or notice delay.
+        assertEquals(listOf(RunState.COMPLETED), persisted)
+        assertEquals(listOf(Op.OBSERVE, Op.COMPLETE), device.executed)
+    }
+
+    @Test
+    fun modelScreenshotFailureKeepsReadableObservationAndDoesNotRequireUser() = runTest {
+        val device = Device(screen("now"))
+        val agent = Agent(gateway(device), { _, _ -> })
+        var rounds = 0
+        agent.start(backgroundScope, provider { input ->
+            when (rounds++) {
+                0 -> reply(Action(Op.OBSERVE, pkg))
+                1 -> { device.failure = "capture_uncertain"; reply(Action(Op.SCREENSHOT, pkg, "now")) }
+                else -> {
+                    assertTrue(input.last().toString().contains("observation_unavailable"))
+                    device.failure = ""
+                    reply(Action(Op.COMPLETE, text = "Read visible content"))
+                }
+            }
+        }, "Read")
+        runCurrent()
+        assertEquals(RunState.COMPLETED, agent.state.value)
+        assertEquals("", agent.error.value)
     }
 
     @Test

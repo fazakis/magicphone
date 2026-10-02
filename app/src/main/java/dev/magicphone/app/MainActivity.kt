@@ -261,8 +261,10 @@ fun errorResource(code: String): Int =
                 "approval_expired",
                 "fresh_observation_required",
             ) -> R.string.error_stale
-        code in setOf("manual_secret", "manual_security", "device_locked", "secure_window") ->
-            R.string.error_secret
+        code == "manual_secret" -> R.string.error_secret
+        code == "manual_security" -> R.string.error_manual_security
+        code == "device_locked" -> R.string.error_device_locked
+        code == "secure_window" -> R.string.error_secure_window
         code in setOf("session_expired", "sign_in_required") -> R.string.error_session
         code in
             setOf(

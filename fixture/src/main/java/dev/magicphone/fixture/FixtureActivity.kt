@@ -41,7 +41,10 @@ class FixtureActivity : Activity() {
         layout.addView(
             EditText(this).apply {
                 hint = "Ordinary text · Κείμενο"
+                inputType = intent.getIntExtra("inputType", android.text.InputType.TYPE_CLASS_TEXT)
                 id = 1003
+                if (intent.hasExtra("inputType")) contentDescription =
+                    "Fixture input $inputType large ${intent.getBooleanExtra("largeTree", false)}"
             }
         )
         layout.addView(
@@ -59,6 +62,9 @@ class FixtureActivity : Activity() {
                 }
             }
         )
+        if (intent.getBooleanExtra("largeTree", false)) {
+            repeat(120) { index -> layout.addView(TextView(this).apply { text = "Ordinary row $index" }) }
+        }
         setContentView(layout)
     }
 }

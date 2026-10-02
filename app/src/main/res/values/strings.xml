@@ -107,7 +107,7 @@
     <string name="error_stale">The screen kept changing while choosing an action. Wait for it to settle, then retry the task.</string>
     <string name="error_protected_control">The action overlaps a MagicPhone approval control. Review or dismiss the approval, then retry.</string>
     <string name="error_screen_uncertain">The app screen cannot be read reliably. Close any popup, keyboard, notification shade or other overlay, keep the app visible, then retry.</string>
-    <string name="error_secret">Complete this step manually: the screen may contain secrets or security controls.</string>
+    <string name="error_secret">A password field is visible. Complete the sign-in step manually.</string>
     <string name="error_session">Sign in again; your session is missing or expired.</string>
     <string name="error_limit">Your provider reports a usage limit or unavailable plan usage. Review your account limits.</string>
     <string name="error_uncertain">The action status is uncertain. Inspect the app manually before continuing.</string>
@@ -205,4 +205,8 @@
     <string name="stop_reading">Stop reading</string>
     <string name="tts_unavailable">Text-to-speech is unavailable. Check your Android speech engine in system settings.</string>
     <string name="tts_language_missing">This voice is not installed. Download it in Android text-to-speech settings.</string>
+    <string name="screen_read_continuing">Reading the available screen content. Continuing…</string>
+    <string name="error_manual_security">This system or permission screen needs manual input.</string>
+    <string name="error_device_locked">Unlock your device to continue.</string>
+    <string name="error_secure_window">This app blocks screen capture.</string>
 </resources>

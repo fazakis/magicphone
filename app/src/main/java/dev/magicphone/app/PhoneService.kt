@@ -161,8 +161,8 @@ class PhoneService : AccessibilityService() {
             val geometry = manager.currentWindowMetrics.bounds
             val width = geometry.width().takeIf { it > 0 } ?: display.widthPixels
             val height = geometry.height().takeIf { it > 0 } ?: display.heightPixels
-            // Never traverse another application's root. Unknown overlays/IME/multi-window suppress
-            // capture.
+            // Never traverse another application's root. Unknown overlays/multi-window
+            // remain blocked; a visible keyboard permits filtered app text, never a capture.
             val ownedIds = listOfNotNull(overlay, inputBubble, quickPrompt.view).filter { it.isAttachedToWindow }.mapNotNull { view ->
                 val info = view.createAccessibilityNodeInfo() ?: return@mapNotNull null
                 try { info.windowId.takeIf { it >= 0 } } finally { info.recycle() }
@@ -175,6 +175,7 @@ class PhoneService : AccessibilityService() {
             val activeSystem = windows.any { w ->
                         w.type != AccessibilityWindowInfo.TYPE_APPLICATION &&
                             w.type != AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY &&
+                            w.type != AccessibilityWindowInfo.TYPE_INPUT_METHOD &&
                             w.isActive
                     }
             val foreignOverlay = windows.any { w ->
@@ -199,27 +200,39 @@ class PhoneService : AccessibilityService() {
                     focused = false,
                 )
             }
+            // A keyboard is normal app input, not an unknown foreground app. Only read
+            // the permitted app's nodes outside it; never traverse the IME's own root.
+            val keyboardRects = windows.filter { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+                .mapNotNull { window ->
+                    val bounds = android.graphics.Rect()
+                    window.getBoundsInScreen(bounds)
+                    if (bounds.isEmpty) null else Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
+                }
+            val controlRects = listOfNotNull(overlay, inputBubble, quickPrompt.view)
+                .filter { it.isAttachedToWindow }.map { view ->
+                    val pos = IntArray(2)
+                    view.getLocationOnScreen(pos)
+                    Rect(pos[0], pos[1], pos[0] + view.width, pos[1] + view.height)
+                }
+            val rects = keyboardRects + controlRects
             val nodes = mutableListOf<Node>()
             var sensitive = false
+            var partial = rects.isNotEmpty()
             var count = 0
             fun visit(n: AccessibilityNodeInfo, depth: Int) {
                 if (depth > 30 || ++count > 500) {
-                    sensitive = true
+                    partial = true
                     return
                 }
                 if (refreshNodes && !n.refresh()) {
                     if (BuildConfig.DEBUG) inspectionDiagnostics = "node_refresh_failed"
-                    throw SafeFailure("screen_uncertain")
+                    partial = true
+                    return // Keep other freshly read branches; never retain this stale node.
                 }
-                if (n.childCount > 100) {
-                    sensitive = true
-                    return
-                }
+                if (n.childCount > 100) partial = true
                 if (!n.isVisibleToUser || n.packageName?.toString() != requested) return
                 val password =
-                    n.isPassword ||
-                        n.inputType and 0x00000080 != 0 ||
-                        n.inputType and 0x00000010 != 0 && n.inputType and 0xf == 2
+                    InputFields.password(n.isPassword, n.inputType)
                 if (password) sensitive = true
                 val r = android.graphics.Rect()
                 n.getBoundsInScreen(r)
@@ -230,7 +243,9 @@ class PhoneService : AccessibilityService() {
                                 (n.text ?: n.contentDescription ?: n.hintText ?: "").toString()
                             )
                             .take(500)
-                if (label.isNotBlank() || n.isClickable || n.isEditable || n.isScrollable) {
+                val covered = rects.any { it.left < r.right && it.right > r.left &&
+                    it.top < r.bottom && it.bottom > r.top }
+                if (!covered && (label.isNotBlank() || n.isClickable || n.isEditable || n.isScrollable)) {
                     nodes +=
                         Node(
                             "",
@@ -277,7 +292,7 @@ class PhoneService : AccessibilityService() {
                 throw SafeFailure("capture_uncertain")
             val signature =
                 digest(
-                    "$app|${selected.first.id}|$width|$height|$rotation|${selected.first.isFocused}|$nodes"
+                    "$app|${selected.first.id}|$width|$height|$rotation|${selected.first.isFocused}|$rects|$nodes"
                 )
             if (signature != lastSignature) {
                 revision++
@@ -291,14 +306,6 @@ class PhoneService : AccessibilityService() {
                 n.copy(ref = ref)
             }
             candidates.clear() // The reference map now owns these node copies.
-            val rects =
-                listOfNotNull(overlay, inputBubble, quickPrompt.view)
-                    .filter { it.isAttachedToWindow }
-                    .map { view ->
-                        val pos = IntArray(2)
-                        view.getLocationOnScreen(pos)
-                        Rect(pos[0], pos[1], pos[0] + view.width, pos[1] + view.height)
-                    }
             return Screen(
                     snapshot,
                     app,
@@ -314,6 +321,7 @@ class PhoneService : AccessibilityService() {
                     tagged,
                     rects,
                     Rect(capture.left, capture.top, capture.right, capture.bottom),
+                    partial = partial,
                 )
                 .also { lastScreen = it }
         } finally {
@@ -440,7 +448,7 @@ class PhoneService : AccessibilityService() {
     private suspend fun screenshot(pkg: String, before: Screen): ToolResult {
         if (SystemClock.elapsedRealtime() - lastShot < 1200)
             throw SafeFailure("screenshot_throttled")
-        if (before.mixed || before.sensitive || before.protectedRects.isNotEmpty())
+        if (before.mixed || before.sensitive || before.partial || before.protectedRects.isNotEmpty())
             throw SafeFailure("capture_uncertain")
         lastShot = SystemClock.elapsedRealtime()
         return suspendCancellableCoroutine { continuation ->

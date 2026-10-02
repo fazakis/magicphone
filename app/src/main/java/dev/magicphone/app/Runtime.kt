@@ -48,6 +48,7 @@ class AppRuntime(val app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val vault = Vault(app)
     val notice = MutableStateFlow("")
+    internal val screenReadNotice = ScreenReadNotice(app, scope)
     val settings = MutableStateFlow(loadSettings())
     val archive = MutableStateFlow(loadArchive())
     val current = MutableStateFlow<String?>(archive.value.conversations.maxByOrNull { it.updated }?.id)
@@ -201,6 +202,7 @@ class AppRuntime(val app: Application) {
         )
 
     init {
+        scope.launch { agent.screenReadNotices.collect { screenReadNotice.show() } }
         scope.launch {
             agent.state.collect {
                 if (it !in setOf(RunState.COMPLETED, RunState.FAILED)) resultRequest.value = null

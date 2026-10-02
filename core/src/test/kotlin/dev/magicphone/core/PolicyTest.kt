@@ -200,6 +200,15 @@ class PolicyTest {
     }
 
     @Test
+    fun partialFlagDoesNotRelaxWindowOrSensitiveScreenGuards() {
+        for (s in listOf(screen.copy(mixed = true), screen.copy(focused = false),
+                screen.copy(sensitive = true), screen.copy(locked = true), screen.copy(app = "other.app"))) {
+            assertIs<Decision.Deny>(policy.decide(Action(Op.OBSERVE, pkg), s.copy(partial = true), config, 0))
+            assertIs<Decision.Deny>(policy.decide(tap(), s.copy(partial = true), config, 0))
+        }
+    }
+
+    @Test
     fun protectedOverlayBlocksCoordinatesAndCoveredNodes() {
         val s = screen.copy(protectedRects = listOf(Rect(0, 0, 100, 100)))
         assertIs<Decision.Deny>(policy.decide(tap(), s, config, 0))

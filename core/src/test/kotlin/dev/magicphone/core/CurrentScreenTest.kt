@@ -9,13 +9,16 @@ import kotlinx.serialization.json.*
 class CurrentScreenTest {
     private val target = "test.reader"
     private fun run(allowed: Boolean = true, foreground: String = target, images: Boolean = true,
-        screenshotFailure: String = "", mutation: Boolean = false, check: (Agent, List<Op>, List<JsonElement>) -> Unit) = runTest {
+        screenshotFailure: String = "", observationFailure: String = "", partial: Boolean = false, mutation: Boolean = false, check: (Agent, List<Op>, List<JsonElement>) -> Unit) = runTest {
         val operations = mutableListOf<Op>()
         var modelInput = emptyList<JsonElement>()
         val gateway = Gateway(Policy("own.app"), { PolicyConfig(apps = mapOf(target to AppRule(observe = allowed, mutate = mutation))) },
             object : DevicePort {
                 override suspend fun foregroundPackage() = foreground
-                override suspend fun inspect(app: String) = Screen(id = "s1", app = app, locked = false, mixed = false, focused = true)
+                override suspend fun inspect(app: String): Screen {
+                    if (observationFailure.isNotBlank()) throw SafeFailure(observationFailure)
+                    return Screen(id = "s1", app = app, locked = false, mixed = false, focused = true, partial = partial)
+                }
                 override suspend fun execute(action: Action, screen: Screen): ToolResult {
                     operations += action.op
                     return when (action.op) {
@@ -64,6 +67,29 @@ class CurrentScreenTest {
     @Test fun textAnswerCannotClaimUnverifiedMutationCompleted() = run(mutation = true) { agent, _, _ ->
         assertEquals(RunState.FAILED, agent.state.value)
         assertEquals("verification_required", agent.error.value)
+    }
+    @Test fun transientScreenshotFailuresFallBackToTextWithoutStopping() {
+        for (code in listOf("capture_uncertain", "screen_uncertain", "stale_target", "screenshot_throttled", "screenshot_failed"))
+            run(screenshotFailure = code) { agent, _, input ->
+                assertEquals(RunState.COMPLETED, agent.state.value, code)
+                assertEquals("", agent.error.value)
+                assertTrue(input.toString().contains("Visible sample abstract"))
+                assertTrue(input.toString().contains("observation_unavailable"))
+                assertFalse(input.toString().contains("input_image"))
+            }
+    }
+    @Test fun transientInitialObservationStillReachesModel() = run(observationFailure = "screen_uncertain") { agent, ops, input ->
+        assertEquals(RunState.COMPLETED, agent.state.value)
+        assertEquals(listOf(Op.APPS), ops)
+        assertTrue(input.toString().contains("observation_unavailable"))
+        assertFalse(input.toString().contains("input_image"))
+    }
+    @Test fun partialScreenSuppliesVisibleTextAndSkipsScreenshot() = run(partial = true) { agent, ops, input ->
+        assertEquals(RunState.COMPLETED, agent.state.value)
+        assertEquals(listOf(Op.APPS, Op.OBSERVE), ops)
+        assertTrue(input.toString().contains("Visible sample abstract"))
+        assertTrue(input.toString().contains("partial_screen_image_omitted"))
+        assertFalse(input.toString().contains("input_image"))
     }
     @Test fun secureScreenshotDoesNotLeakContextToModel() = run(screenshotFailure = "secure_window") { agent, _, input ->
         assertEquals("secure_window", agent.error.value); assertTrue(input.isEmpty())

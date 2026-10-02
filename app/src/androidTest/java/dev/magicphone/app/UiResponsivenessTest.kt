@@ -165,7 +165,9 @@ class UiResponsivenessTest {
                     ?: device.wait(Until.findObject(By.res("com.android.systemui", "accessibility_floating_menu")), 10000)
                     ?: device.wait(Until.findObject(By.descContains("MagicPhone").pkg("com.android.systemui")), 3000)
                 Assert.assertNotNull("Android accessibility shortcut is visible", shortcut)
-                val namedButton = device.findObject(By.descContains("MagicPhone").pkg("com.android.systemui"))
+                // A status-bar notification can also have a MagicPhone description.
+                // Select only inside the actual system shortcut, never that status icon.
+                val namedButton = shortcut.findObject(By.descContains("MagicPhone"))
                 val button = if (android.os.Build.VERSION.SDK_INT < 31) shortcut else namedButton ?: shortcut
                 println("Shortcut fixture target: resource=${button.resourceName}; bounds=${button.visibleBounds}; children=${button.childCount}; named=${namedButton != null}")
                 val clicksBefore = r.phone!!.shortcutClicks

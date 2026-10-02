@@ -37,6 +37,9 @@ class Agent(
     val usage = MutableStateFlow("")
     val error = MutableStateFlow("")
     val diagnostics = MutableStateFlow("")
+    private val readNotices = MutableSharedFlow<Unit>(extraBufferCapacity = 1,
+        onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST)
+    val screenReadNotices = readNotices.asSharedFlow()
     val modelInfo = MutableStateFlow<ModelRunInfo?>(null)
     val metrics = MutableStateFlow(RunMetrics())
     private val corrections = Channel<String>(32)
@@ -149,7 +152,28 @@ class Agent(
                     val outcomes = mutableListOf<String>()
                     val needsObservation = mutableSetOf<String>()
                     val staleApps = mutableSetOf<String>()
-                    var screenRecoveries = 0
+                    var readNoticeSent = false
+                    fun warnRead() {
+                        // One short notice per run, independent of the model/tool coroutine.
+                        if (!readNoticeSent) { readNoticeSent = true; readNotices.tryEmit(Unit) }
+                    }
+                    fun readUnavailable(code: String) = ToolResult("observation_unavailable",
+                        "Temporary screen read limitation: $code. Continue with the visible app content already supplied. " +
+                            "Use OBSERVE for fresh permitted content when needed; a screenshot is optional. " +
+                            "Do not ask the user to close overlays or restart for this temporary limitation. " +
+                            "Do not invent hidden content or repeat an action that was already dispatched.")
+                    suspend fun runTool(action: Action): ToolResult {
+                        val result = try { timed("tool", action.op) { gateway.run(action) } }
+                        catch (e: SafeFailure) {
+                            if (action.op !in setOf(Op.OBSERVE, Op.SCREENSHOT) || e.code !in setOf(
+                                "screen_uncertain", "capture_uncertain", "stale_target", "screenshot_throttled", "screenshot_failed")) throw e
+                            warnRead()
+                            return readUnavailable(e.code)
+                        }
+                        if (action.op == Op.OBSERVE && result.status == "observed" &&
+                            JsonCodec.decodeFromString<Screen>(result.content).partial) warnRead()
+                        return result
+                    }
                     fun record(action: Action, result: ToolResult) {
                         actions.update { (it + ActionSummary(action.op, action.app, result.status)).takeLast(80) }
                         outcomes += "${action.op} ${action.app}: ${result.status}"
@@ -157,7 +181,7 @@ class Agent(
                     suspend fun observe(app: String): List<ToolResult> {
                         if (state.value == RunState.PAUSED) resumeSignal.await()
                         val action = Action(Op.OBSERVE, app)
-                        val result = timed("tool", action.op) { gateway.run(action) }
+                        val result = runTool(action)
                         record(action, result)
                         if (result.status == "observed") {
                             needsObservation.remove(app)
@@ -176,11 +200,10 @@ class Agent(
                                 throw SafeFailure("screen_context_changed")
                             val observed = observe(screenContext)
                             initial += observed
-                            if (provider.supportsImages) {
-                                val snapshot = JsonCodec.decodeFromString<Screen>(observed.first().content).id
-                                initial += timed("tool", Op.SCREENSHOT) {
-                                    gateway.run(Action(Op.SCREENSHOT, screenContext, snapshot))
-                                }
+                            if (provider.supportsImages && observed.first().status == "observed") {
+                                val screen = JsonCodec.decodeFromString<Screen>(observed.first().content)
+                                if (screen.partial) initial += readUnavailable("partial_screen_image_omitted")
+                                else initial += runTool(Action(Op.SCREENSHOT, screenContext, screen.id))
                             }
                             context += message("user", "I invoked MagicPhone on the currently open screen in $screenContext. " +
                                 "Use the supplied screen as the starting context for my request; do not reopen the app unnecessarily. " +
@@ -285,7 +308,7 @@ class Agent(
                                     try {
                                         if (action.isDevice && action.op != Op.OBSERVE && action.app in staleApps)
                                             throw SafeFailure("fresh_observation_required")
-                                        timed("tool", action.op) { gateway.run(action) }
+                                        runTool(action)
                                     } catch (e: SafeFailure) {
                                         // These device failures occur before Android executes the
                                         // requested action. Replan; never replay an old proposal or
@@ -294,9 +317,10 @@ class Agent(
                                             "stale_target", "stale_approval", "approval_expired",
                                             "screen_uncertain", "protected_control", "capture_uncertain",
                                             "fresh_observation_required",
-                                        ) && ++screenRecoveries <= 3) {
+                                        )) {
                                             staleApps += action.app
                                             needsObservation += action.app
+                                            if (e.code in setOf("screen_uncertain", "capture_uncertain")) warnRead()
                                             val status = "not_dispatched_${e.code}"
                                             actions.update { (it + ActionSummary(action.op, action.app, status)).takeLast(80) }
                                             outcomes += "${action.op} ${action.app}: $status"
@@ -305,7 +329,8 @@ class Agent(
                                                     "OBSERVE ${action.app} again, then choose a new action using its fresh snapshot and node references. " +
                                                     "Do not replay the old action. Local policy handles any approval; do not ask separately. " +
                                                     "For protected_control use an unobstructed semantic target or coordinates outside MagicPhone controls. " +
-                                                    "If capture_uncertain or an overlay prevents observation, ask the user to dismiss the overlay or notification shade.")
+                                                    "Continue using visible content from a partial observation. Do not ask the user to dismiss overlays or restart. " +
+                                                    "Never claim an unobserved outcome or invent hidden content.")
                                             discardRemaining = "cancelled_screen_changed"
                                             break
                                         }
@@ -325,7 +350,6 @@ class Agent(
                                         result.status == "dispatched"
                                 ) {
                                     needsObservation.add(action.app)
-                                    screenRecoveries = 0
                                 }
                                 if (action.op == Op.OBSERVE && result.status == "observed") {
                                     needsObservation.remove(action.app)

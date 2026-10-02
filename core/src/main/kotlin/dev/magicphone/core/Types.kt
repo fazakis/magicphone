@@ -160,10 +160,13 @@ data class Screen(
     val nodes: List<Node> = emptyList(),
     val protectedRects: List<Rect> = emptyList(),
     val captureBounds: Rect = Rect(0, 0, 0, 0),
+    // Device-filtered, visible nodes from the permitted app; never foreign overlay content.
+    // Partial does not relax focus, mixed-window or action checks.
+    val partial: Boolean = false,
 ) {
     val binding: String
         get() =
-            "$id|$app|$window|$revision|$width|$height|$rotation|$focused|$locked|$mixed|$sensitive|$captureBounds"
+            "$id|$app|$window|$revision|$width|$height|$rotation|$focused|$locked|$mixed|$sensitive|$captureBounds|$partial|$protectedRects"
 }
 
 @Serializable
