@@ -58,3 +58,7 @@ The install/download links now target v0.2.2. The new `disclaimer.html` carries 
 ## 0.2.3 download update (2026-10-02)
 
 Homepage version and download links now target v0.2.3. Existing screenshots, disclaimer and domain configuration are unchanged.
+
+## 0.2.4 download update (2026-10-02)
+
+Homepage version and download links target v0.2.4. Local links and the release URL are checked as part of publication.

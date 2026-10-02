@@ -84,12 +84,12 @@ class CurrentScreenTest {
         assertTrue(input.toString().contains("observation_unavailable"))
         assertFalse(input.toString().contains("input_image"))
     }
-    @Test fun partialScreenSuppliesVisibleTextAndSkipsScreenshot() = run(partial = true) { agent, ops, input ->
+    @Test fun partialScreenSuppliesVisibleTextAndScreenshot() = run(partial = true) { agent, ops, input ->
         assertEquals(RunState.COMPLETED, agent.state.value)
-        assertEquals(listOf(Op.APPS, Op.OBSERVE), ops)
+        assertEquals(listOf(Op.APPS, Op.OBSERVE, Op.SCREENSHOT), ops)
         assertTrue(input.toString().contains("Visible sample abstract"))
-        assertTrue(input.toString().contains("partial_screen_image_omitted"))
-        assertFalse(input.toString().contains("input_image"))
+        assertFalse(input.toString().contains("partial_screen_image_omitted"))
+        assertTrue(input.toString().contains("input_image"))
     }
     @Test fun secureScreenshotDoesNotLeakContextToModel() = run(screenshotFailure = "secure_window") { agent, _, input ->
         assertEquals("secure_window", agent.error.value); assertTrue(input.isEmpty())

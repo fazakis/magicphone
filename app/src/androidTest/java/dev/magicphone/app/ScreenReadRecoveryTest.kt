@@ -96,8 +96,8 @@ class ScreenReadRecoveryTest {
             override suspend fun models() = emptyList<ModelChoice>()
             override suspend fun respond(input: List<JsonElement>, delta: (String) -> Unit): Reply {
                 Assert.assertTrue(input.toString().contains("Counter: 0"))
-                Assert.assertTrue(input.toString().contains("partial_screen_image_omitted"))
-                Assert.assertFalse(input.toString().contains("input_image"))
+                Assert.assertFalse(input.toString().contains("partial_screen_image_omitted"))
+                Assert.assertTrue(input.toString().contains("input_image"))
                 entered.complete(Unit)
                 finish.await()
                 return Reply("The visible counter is 0.", emptyList(), emptyList())
@@ -117,9 +117,8 @@ class ScreenReadRecoveryTest {
         finish.complete(Unit)
         await("Same task completed without restart") { r.agent.state.value == RunState.COMPLETED }
         Assert.assertTrue(r.agent.question.value.isEmpty())
-        Assert.assertFalse(r.agent.actions.value.any { it.operation == Op.SCREENSHOT })
     }
-    @Test fun keyboardAllowsVisibleTargetButRejectsKeyboardCoordinatesAndCapture() {
+    @Test fun keyboardAllowsMaskedCaptureButRejectsKeyboardCoordinates() {
         fixture(); keyboard()
         runBlocking {
             r.gateway.start()
@@ -130,10 +129,7 @@ class ScreenReadRecoveryTest {
                 r.gateway.run(Action(Op.TAP, pkg, screen.id, x = (key.left + key.right) / 2, y = (key.top + key.bottom) / 2))
                 Assert.fail("Keyboard coordinates must not execute")
             } catch (e: SafeFailure) { Assert.assertEquals("protected_control", e.code) }
-            try {
-                r.gateway.run(Action(Op.SCREENSHOT, pkg, screen.id))
-                Assert.fail("IME content must not be captured")
-            } catch (e: SafeFailure) { Assert.assertEquals("capture_uncertain", e.code) }
+            Assert.assertEquals("captured", r.gateway.run(Action(Op.SCREENSHOT, pkg, screen.id)).status)
             val button = screen.nodes.single { it.label == "Add one · Προσθήκη" }
             Assert.assertEquals("dispatched", r.gateway.run(Action(Op.TAP, pkg, screen.id, button.ref)).status)
             val after = r.gateway.run(Action(Op.OBSERVE, pkg))
@@ -162,8 +158,7 @@ class ScreenReadRecoveryTest {
         runBlocking {
             r.gateway.start()
             Assert.assertEquals("observed", r.gateway.run(Action(Op.OBSERVE, pkg)).status)
-            try { r.gateway.run(Action(Op.SCREENSHOT, pkg, large.id)); Assert.fail("Incomplete scan must not capture") }
-            catch (e: SafeFailure) { Assert.assertEquals("capture_uncertain", e.code) }
+            Assert.assertEquals("captured", r.gateway.run(Action(Op.SCREENSHOT, pkg, large.id)).status)
             r.gateway.stop()
         }
         fixture(0x81)

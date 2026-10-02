@@ -58,7 +58,11 @@ class Policy(private val ownPackage: String) {
             if (screen.mixed || !screen.focused || screen.app != action.app)
                 return Decision.Deny("screen_uncertain")
             if (screen.sensitive) return Decision.Deny("manual_secret")
-            if (action.snapshot.isNotBlank() && action.snapshot != screen.id)
+            // Global navigation and coordinate dispatch are still scoped to the default display.
+            // A read may use the selected window on another display without authorizing actions there.
+            if (screen.displayId != 0 && action.op.mutates) return Decision.Deny("screen_uncertain")
+            // A screenshot is a fresh read of this permitted app, not a mutation of an old target.
+            if (action.op != Op.SCREENSHOT && action.snapshot.isNotBlank() && action.snapshot != screen.id)
                 return Decision.Deny("stale_target")
             if (action.node.isNotBlank()) {
                 val node =

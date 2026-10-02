@@ -135,6 +135,17 @@ class PhoneService : AccessibilityService() {
         // still checks full policy; an executed action is never replayed on timeout.
     }
 
+    /** No delay on healthy reads. Let a briefly missing resize window reappear locally. */
+    suspend fun inspectReady(app: String): Screen {
+        var screen = inspect(app)
+        repeat(10) {
+            if (screen.window >= 0 || screen.locked || screen.app.isNotBlank()) return screen
+            delay(50)
+            screen = inspect(app)
+        }
+        return screen
+    }
+
     fun inspect(requested: String): Screen {
         val rule = Policy(packageName).appRule(requested, runtime.settings.value.policy)
         if (!rule.observe || rule.deny) throw SafeFailure("app_not_allowed")
@@ -157,12 +168,15 @@ class PhoneService : AccessibilityService() {
                 selected?.second?.packageName?.toString()
                     ?: active?.second?.packageName?.toString().orEmpty()
             val root = selected?.second
-            val display = resources.displayMetrics
-            val geometry = manager.currentWindowMetrics.bounds
-            val width = geometry.width().takeIf { it > 0 } ?: display.widthPixels
-            val height = geometry.height().takeIf { it > 0 } ?: display.heightPixels
+            val displayId = selected?.first?.displayId ?: Display.DEFAULT_DISPLAY
+            val targetDisplay = getSystemService(android.hardware.display.DisplayManager::class.java).getDisplay(displayId)
+            val displayContext = targetDisplay?.let { createDisplayContext(it) } ?: this
+            val displayManager = displayContext.getSystemService(WindowManager::class.java)
+            val geometry = displayManager.maximumWindowMetrics.bounds
+            val width = geometry.width()
+            val height = geometry.height()
             // Never traverse another application's root. Unknown overlays/multi-window
-            // remain blocked; a visible keyboard permits filtered app text, never a capture.
+            // remain blocked; keyboard/control pixels are masked from captured images.
             val ownedIds = listOfNotNull(overlay, inputBubble, quickPrompt.view).filter { it.isAttachedToWindow }.mapNotNull { view ->
                 val info = view.createAccessibilityNodeInfo() ?: return@mapNotNull null
                 try { info.windowId.takeIf { it >= 0 } } finally { info.recycle() }
@@ -219,33 +233,39 @@ class PhoneService : AccessibilityService() {
             var sensitive = false
             var partial = rects.isNotEmpty()
             var count = 0
-            fun visit(n: AccessibilityNodeInfo, depth: Int) {
-                if (depth > 30 || ++count > 500) {
+            var captureReady = true
+            var textCharacters = 0
+            fun visit(n: AccessibilityNodeInfo, depth: Int, collect: Boolean = true) {
+                if (depth > 60 || ++count > 4000) {
                     partial = true
+                    captureReady = false
                     return
                 }
                 if (refreshNodes && !n.refresh()) {
                     if (BuildConfig.DEBUG) inspectionDiagnostics = "node_refresh_failed"
                     partial = true
+                    captureReady = false
                     return // Keep other freshly read branches; never retain this stale node.
                 }
-                if (n.childCount > 100) partial = true
-                if (!n.isVisibleToUser || n.packageName?.toString() != requested) return
+                val collectText = collect && depth <= 30 && count <= 500
+                if (!collectText || n.childCount > 100) partial = true
+                if (n.packageName?.toString() != requested) return
+                // Continue scanning descendants for passwords even beyond text budgets.
+                // Invisible containers can still have visible children on some apps.
+                val visible = n.isVisibleToUser
                 val password =
                     InputFields.password(n.isPassword, n.inputType)
-                if (password) sensitive = true
+                if (password && visible) sensitive = true
                 val r = android.graphics.Rect()
                 n.getBoundsInScreen(r)
-                val label =
-                    if (password) "[manual field]"
-                    else
-                        Sanitizer.text(
-                                (n.text ?: n.contentDescription ?: n.hintText ?: "").toString()
-                            )
-                            .take(500)
+                val rawLabel = if (password) "[manual field]" else if (visible && collectText)
+                    Sanitizer.text((n.text ?: n.contentDescription ?: n.hintText ?: "").toString()) else ""
+                val label = rawLabel.take(minOf(8000, (40000 - textCharacters).coerceAtLeast(0)))
+                if (label.length < rawLabel.length) partial = true
+                textCharacters += label.length
                 val covered = rects.any { it.left < r.right && it.right > r.left &&
                     it.top < r.bottom && it.bottom > r.top }
-                if (!covered && (label.isNotBlank() || n.isClickable || n.isEditable || n.isScrollable)) {
+                if (visible && collectText && !covered && (label.isNotBlank() || n.isClickable || n.isEditable || n.isScrollable)) {
                     nodes +=
                         Node(
                             "",
@@ -260,25 +280,23 @@ class PhoneService : AccessibilityService() {
                         )
                     candidates += AccessibilityNodeInfo.obtain(n)
                 }
-                for (i in 0 until n.childCount.coerceAtMost(100)) n.getChild(i)?.let { child ->
-                    try {
-                        visit(child, depth + 1)
-                    } finally {
-                        child.recycle()
-                    }
+                if (n.childCount > 4000) captureReady = false
+                for (i in 0 until n.childCount.coerceAtMost(4000)) {
+                    if (count >= 4000) { partial = true; captureReady = false; break }
+                    val child = n.getChild(i)
+                    if (child == null) { partial = true; captureReady = false; continue }
+                    try { visit(child, depth + 1, collectText && i < 100) }
+                    finally { child.recycle() }
                 }
             }
             visit(root, 0)
-            val rotation =
-                getSystemService(android.hardware.display.DisplayManager::class.java)
-                    .getDisplay(Display.DEFAULT_DISPLAY)
-                    ?.rotation ?: 0
-            if (selected.first.displayId != Display.DEFAULT_DISPLAY)
-                throw SafeFailure("screen_uncertain")
+            val rotation = targetDisplay?.rotation ?: 0
+            val windowBounds = android.graphics.Rect()
+            selected.first.getBoundsInScreen(windowBounds)
             val capture = android.graphics.Rect()
             root.getBoundsInScreen(capture)
             val systemInsets =
-                manager.currentWindowMetrics.windowInsets.getInsetsIgnoringVisibility(
+                displayManager.maximumWindowMetrics.windowInsets.getInsetsIgnoringVisibility(
                     WindowInsets.Type.systemBars()
                 )
             if (
@@ -292,7 +310,7 @@ class PhoneService : AccessibilityService() {
                 throw SafeFailure("capture_uncertain")
             val signature =
                 digest(
-                    "$app|${selected.first.id}|$width|$height|$rotation|${selected.first.isFocused}|$rects|$nodes"
+                    "$app|${selected.first.id}|$displayId|$width|$height|$rotation|${selected.first.isFocused}|$rects|$nodes|$capture|$windowBounds|$captureReady"
                 )
             if (signature != lastSignature) {
                 revision++
@@ -322,6 +340,9 @@ class PhoneService : AccessibilityService() {
                     rects,
                     Rect(capture.left, capture.top, capture.right, capture.bottom),
                     partial = partial,
+                    displayId = displayId,
+                    windowBounds = Rect(windowBounds.left, windowBounds.top, windowBounds.right, windowBounds.bottom),
+                    captureReady = captureReady,
                 )
                 .also { lastScreen = it }
         } finally {
@@ -368,8 +389,8 @@ class PhoneService : AccessibilityService() {
             } while (SystemClock.elapsedRealtime() < end)
             return ToolResult("failed", "Condition not observed before timeout.")
         }
-        val latest = inspect(action.app)
-        if (latest.binding != screen.binding) throw SafeFailure("stale_target")
+        val latest = if (action.op == Op.SCREENSHOT) inspectReady(action.app) else inspect(action.app)
+        if (action.op != Op.SCREENSHOT && latest.binding != screen.binding) throw SafeFailure("stale_target")
         val checked =
             Policy(packageName)
                 .decide(action, latest, runtime.settings.value.policy, System.currentTimeMillis())
@@ -377,7 +398,7 @@ class PhoneService : AccessibilityService() {
         val node = refs[action.node]
         val accepted =
             when (action.op) {
-                Op.SCREENSHOT -> return screenshot(action.app, screen)
+                Op.SCREENSHOT -> return screenshot(action.app, latest)
                 Op.TAP ->
                     if (node != null) node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                     else gesture(action.x, action.y, action.x, action.y, 80)
@@ -448,36 +469,50 @@ class PhoneService : AccessibilityService() {
     private suspend fun screenshot(pkg: String, before: Screen): ToolResult {
         if (SystemClock.elapsedRealtime() - lastShot < 1200)
             throw SafeFailure("screenshot_throttled")
-        if (before.mixed || before.sensitive || before.partial || before.protectedRects.isNotEmpty())
+        if (before.mixed || before.sensitive || before.locked || !before.focused || !before.captureReady)
             throw SafeFailure("capture_uncertain")
         lastShot = SystemClock.elapsedRealtime()
         return suspendCancellableCoroutine { continuation ->
-            takeScreenshot(
-                Display.DEFAULT_DISPLAY,
-                mainExecutor,
-                object : TakeScreenshotCallback {
+            val windowCapture = Build.VERSION.SDK_INT >= 34
+            val callback = object : TakeScreenshotCallback {
                     override fun onSuccess(result: ScreenshotResult) {
                         val buffer = result.hardwareBuffer
                         try {
                             if (!continuation.isActive) return
-                            if (inspect(pkg).binding != before.binding)
+                            val after = inspect(pkg)
+                            if (after.captureBinding != before.captureBinding)
                                 throw SafeFailure("stale_target")
                             val hardware =
                                 Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)
                                     ?: throw SafeFailure("screenshot_failed")
                             val bitmap =
                                 try {
-                                    hardware.copy(Bitmap.Config.ARGB_8888, false)
+                                    hardware.copy(Bitmap.Config.ARGB_8888, true)
                                 } finally {
                                     hardware.recycle()
                                 }
+                            val origin = if (windowCapture) before.windowBounds else Rect(0, 0, before.width, before.height)
+                            if (bitmap.width != origin.right - origin.left || bitmap.height != origin.bottom - origin.top) {
+                                bitmap.recycle()
+                                throw SafeFailure("capture_uncertain")
+                            }
                             val rect = before.captureBounds
-                            val left = rect.left.coerceIn(0, bitmap.width - 1)
-                            val top = rect.top.coerceIn(0, bitmap.height - 1)
-                            val width =
-                                (rect.right.coerceAtMost(bitmap.width) - left).coerceAtLeast(1)
-                            val height =
-                                (rect.bottom.coerceAtMost(bitmap.height) - top).coerceAtLeast(1)
+                            val left = rect.left - origin.left
+                            val top = rect.top - origin.top
+                            val width = rect.right - rect.left
+                            val height = rect.bottom - rect.top
+                            if (left < 0 || top < 0 || width <= 0 || height <= 0 || left + width > bitmap.width || top + height > bitmap.height) {
+                                bitmap.recycle()
+                                throw SafeFailure("capture_uncertain")
+                            }
+                            // Both API paths exclude keyboard/control pixels. No foreign
+                            // window pixels or covered app content are sent to the model.
+                            val canvas = android.graphics.Canvas(bitmap)
+                            val mask = android.graphics.Paint().apply { color = android.graphics.Color.BLACK }
+                            before.protectedRects.forEach { area ->
+                                canvas.drawRect((area.left - origin.left).toFloat(), (area.top - origin.top).toFloat(),
+                                    (area.right - origin.left).toFloat(), (area.bottom - origin.top).toFloat(), mask)
+                            }
                             val cropped = Bitmap.createBitmap(bitmap, left, top, width, height)
                             val output = ByteArrayOutputStream()
                             try {
@@ -510,12 +545,14 @@ class PhoneService : AccessibilityService() {
                                 SafeFailure(
                                     if (errorCode == ERROR_TAKE_SCREENSHOT_SECURE_WINDOW)
                                         "secure_window"
+                                    else if (errorCode == ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT) "screenshot_throttled"
                                     else "screenshot_failed"
                                 )
                             )
                     }
-                },
-            )
+                }
+            if (windowCapture) takeScreenshotOfWindow(before.window, mainExecutor, callback)
+            else takeScreenshot(before.displayId, mainExecutor, callback)
         }
     }
 

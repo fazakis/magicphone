@@ -202,8 +202,7 @@ class Agent(
                             initial += observed
                             if (provider.supportsImages && observed.first().status == "observed") {
                                 val screen = JsonCodec.decodeFromString<Screen>(observed.first().content)
-                                if (screen.partial) initial += readUnavailable("partial_screen_image_omitted")
-                                else initial += runTool(Action(Op.SCREENSHOT, screenContext, screen.id))
+                                initial += runTool(Action(Op.SCREENSHOT, screenContext, screen.id))
                             }
                             context += message("user", "I invoked MagicPhone on the currently open screen in $screenContext. " +
                                 "Use the supplied screen as the starting context for my request; do not reopen the app unnecessarily. " +

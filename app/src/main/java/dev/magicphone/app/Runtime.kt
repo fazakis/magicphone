@@ -80,12 +80,18 @@ class AppRuntime(val app: Application) {
     private val port =
         object : DevicePort {
             override suspend fun foregroundPackage() = withContext(Dispatchers.Main.immediate) {
-                phone?.foregroundPackage().orEmpty()
+                var foreground = phone?.foregroundPackage().orEmpty()
+                repeat(10) {
+                    if (foreground.isNotBlank()) return@withContext foreground
+                    delay(50)
+                    foreground = phone?.foregroundPackage().orEmpty()
+                }
+                foreground
             }
 
             override suspend fun inspect(app: String) =
                 withContext(Dispatchers.Main.immediate) {
-                    phone?.inspect(app) ?: throw SafeFailure("accessibility_missing")
+                    phone?.inspectReady(app) ?: throw SafeFailure("accessibility_missing")
                 }
 
             override suspend fun execute(action: Action, screen: Screen): ToolResult =

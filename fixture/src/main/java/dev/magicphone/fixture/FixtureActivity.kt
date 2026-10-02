@@ -8,6 +8,7 @@ import android.widget.*
 class FixtureActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        intent.getStringExtra("documentMode")?.let { DocumentFixture.show(this, it); return }
         var count = savedInstanceState?.getInt("count") ?: 0
         val layout =
             LinearLayout(this).apply {

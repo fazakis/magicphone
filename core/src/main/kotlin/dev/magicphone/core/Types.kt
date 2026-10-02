@@ -163,10 +163,17 @@ data class Screen(
     // Device-filtered, visible nodes from the permitted app; never foreign overlay content.
     // Partial does not relax focus, mixed-window or action checks.
     val partial: Boolean = false,
+    val displayId: Int = 0,
+    val windowBounds: Rect = captureBounds,
+    // Text collection limits are separate from the credential scan used for images.
+    val captureReady: Boolean = true,
 ) {
+    val captureBinding: String
+        get() = "$app|$window|$displayId|$width|$height|$rotation|$focused|$locked|$mixed|$sensitive|$captureBounds|$windowBounds|$captureReady|$protectedRects"
+
     val binding: String
         get() =
-            "$id|$app|$window|$revision|$width|$height|$rotation|$focused|$locked|$mixed|$sensitive|$captureBounds|$partial|$protectedRects"
+            "$id|$app|$window|$revision|$width|$height|$rotation|$focused|$locked|$mixed|$sensitive|$captureBounds|$partial|$protectedRects|$displayId|$windowBounds|$captureReady"
 }
 
 @Serializable
