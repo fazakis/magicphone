@@ -6,8 +6,8 @@ android {
         applicationId = providers.gradleProperty("magicphone.applicationId").orElse("dev.magicphone.app").get()
         minSdk = 30
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.2.6"
+        versionCode = 14
+        versionName = "0.2.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }

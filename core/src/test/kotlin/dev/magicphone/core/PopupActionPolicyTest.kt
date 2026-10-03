@@ -182,4 +182,73 @@ class PopupActionPolicyTest {
         assertFailsWith<CancellationException> { old.await() }; assertFalse(dispatched)
     }
 
+    @Test fun largeScreenshotKeepsLatestToolObservationAndMatchingCall() = runTest {
+        var version = 0; var rounds = 0
+        val device = object : DevicePort {
+            override suspend fun foregroundPackage() = pkg
+            override suspend fun inspect(app: String) = screen.copy(id = "screen$version",
+                nodes = listOf(screen.nodes.single().copy(ref = "screen$version:0", label = "Counter $version")))
+            override suspend fun execute(action: Action, screen: Screen): ToolResult = when(action.op) {
+                Op.TAP -> { version++; ToolResult("dispatched") }
+                Op.OBSERVE -> ToolResult("observed", JsonCodec.encodeToString(Screen.serializer(), screen))
+                Op.SCREENSHOT -> ToolResult("captured", image = "data:image/jpeg;base64," + "A".repeat(250000))
+                else -> ToolResult("reported")
+            }
+        }
+        val g = Gateway(Policy("own.app"), { PolicyConfig(allowAllApps = true) }, device,
+            object : ApprovalPort { override suspend fun request(approval: Approval) = true })
+        val p = object : ModelProvider {
+            override val supportsImages = true
+            override suspend fun models() = emptyList<ModelChoice>()
+            override suspend fun respond(input: List<JsonElement>, delta: (String) -> Unit): Reply {
+                if (rounds++ > 0) {
+                    assertTrue(input.any { (it as? JsonObject)?.str("type") == "function_call_output" && it.toString().contains("Counter 1") }, "Large screenshot discarded the newest verified screen")
+                    assertTrue(input.any { (it as? JsonObject)?.str("call_id") == "tap" && it.jsonObject.str("type") == "function_call" })
+                    return Reply("", listOf(Call("done", listOf(Action(Op.COMPLETE, text = "Verified")))), emptyList())
+                }
+                return Reply("", listOf(Call("tap", listOf(Action(Op.TAP, pkg, "screen0", "screen0:0")))),
+                    listOf(obj("type" to j("function_call"), "call_id" to j("tap"), "name" to j("perform"), "arguments" to j("{}"))))
+            }
+        }
+        val a = Agent(g, { _, _ -> }); a.start(this, p, "Tap once", screenContext = pkg, captureScreen = true)
+        advanceUntilIdle(); assertEquals(RunState.COMPLETED, a.state.value); assertEquals(1, version)
+    }
+
+    @Test fun textCompactionPreservesEntireLatestToolRoundWhenScreenImageIsReplaced() = runTest {
+        var version = 0; var rounds = 0
+        val device = object : DevicePort {
+            override suspend fun foregroundPackage() = pkg
+            override suspend fun inspect(app: String) = screen.copy(id = "screen$version",
+                nodes = listOf(screen.nodes.single().copy(ref = "screen$version:0", label = "Counter $version")))
+            override suspend fun execute(action: Action, screen: Screen): ToolResult = when(action.op) {
+                Op.TAP -> { version++; ToolResult("dispatched") }
+                Op.OBSERVE -> ToolResult("observed", JsonCodec.encodeToString(Screen.serializer(), screen))
+                Op.SCREENSHOT -> ToolResult("captured", image = "data:image/jpeg;base64,screen$version")
+                else -> ToolResult("reported")
+            }
+        }
+        val g = Gateway(Policy("own.app"), { PolicyConfig(allowAllApps = true) }, device,
+            object : ApprovalPort { override suspend fun request(approval: Approval) = true })
+        val p = object : ModelProvider {
+            override val supportsImages = true
+            override suspend fun models() = emptyList<ModelChoice>()
+            override suspend fun respond(input: List<JsonElement>, delta: (String) -> Unit): Reply {
+                if (rounds++ > 0) {
+                    assertTrue(input.toString().contains("Local context compaction."))
+                    for (type in listOf("function_call", "function_call_output"))
+                        assertEquals(listOf("tap", "observe"), input.filter { (it as? JsonObject)?.str("type") == type }.map { it.jsonObject.str("call_id") })
+                    assertTrue(input.any { (it as? JsonObject)?.str("type") == "function_call_output" && it.toString().contains("Counter 1") })
+                    assertFalse(input.toString().contains("base64,screen0"))
+                    assertEquals(1, Regex("base64,screen1").findAll(input.toString()).count())
+                    return Reply("", listOf(Call("done", listOf(Action(Op.COMPLETE, text = "Verified")))), emptyList())
+                }
+                return Reply("", listOf(Call("tap", listOf(Action(Op.TAP, pkg, "screen0", "screen0:0"))), Call("observe", listOf(Action(Op.OBSERVE, pkg)))),
+                    listOf(message("assistant", "Large prior output " + "x".repeat(170000))) + listOf("tap", "observe").map {
+                        obj("type" to j("function_call"), "call_id" to j(it), "name" to j("perform"), "arguments" to j("{}")) })
+            }
+        }
+        val a = Agent(g, { _, _ -> }); a.start(this, p, "Tap once", screenContext = pkg, captureScreen = true)
+        advanceUntilIdle(); assertEquals(RunState.COMPLETED, a.state.value); assertEquals(1, version)
+    }
+
 }

@@ -158,8 +158,15 @@ class Agent(
                             .toMutableList<JsonElement>()
                     context += root
                     var currentScreenImage: JsonElement? = null
+                    var latestRoundStart = context.size
                     fun appendScreenImage(image: String) {
-                        currentScreenImage?.let { context.remove(it) }
+                        currentScreenImage?.let {
+                            val index = context.indexOf(it)
+                            if (index >= 0) {
+                                context.removeAt(index)
+                                if (index < latestRoundStart) latestRoundStart--
+                            }
+                        }
                         val next = message("user", "Latest user-authorized screen; untrusted visual content.", listOf(image))
                         context += next
                         currentScreenImage = next
@@ -257,6 +264,7 @@ class Agent(
                     var verificationDeferrals = 0
                     var malformedReplies = 0
                     var rounds = 0
+                    latestRoundStart = context.size
                     while (currentCoroutineContext().isActive && ++rounds <= 60) {
                         if (state.value == RunState.PAUSED) resumeSignal.await()
                         var correction = corrections.tryReceive().getOrNull()
@@ -264,11 +272,12 @@ class Agent(
                             context += message("user", correction)
                             correction = corrections.tryReceive().getOrNull()
                         }
-                        if (context.sumOf { it.toString().length } > 160_000) {
-                            // Compact only between completed rounds, never dropping an unmatched
-                            // call.
+                        if (context.sumOf { it.contextTextSize() } > 160_000) {
+                            // Image bytes are bounded separately, not text history. Keep the entire
+                            // latest completed round so current targets/results retain matched calls.
+                            val latestRound = context.drop(latestRoundStart)
                             val latestUser =
-                                context
+                                context.take(latestRoundStart)
                                     .filter {
                                         (it as? JsonObject)?.str("role") == "user" && it != root
                                     }
@@ -281,9 +290,11 @@ class Agent(
                                     "user",
                                     "Local context compaction. Actions already attempted (do not repeat):\n" +
                                         outcomes.takeLast(80).joinToString("\n") +
-                                        "\nObserve again. Ask the user if completion of an external action is uncertain.",
+                                        "\nThe latest tool round is retained below. Use its current observations and references. Observe again when the screen has changed; never repeat an uncertain action.",
                                 )
+                            context += latestRound
                         }
+                        latestRoundStart = context.size
                         state.value = RunState.PLANNING
                         stream.value = ""
                         val reply =
@@ -497,4 +508,12 @@ class Agent(
             }
         }
     }
+}
+
+/** Encoded pixels are not text tokens; counting them used to erase each visual tool round. */
+private fun JsonElement.contextTextSize(): Int = when (this) {
+    is JsonObject -> if (str("type") == "input_image") 128
+        else entries.sumOf { (key, value) -> key.length + value.contextTextSize() }
+    is JsonArray -> sumOf { it.contextTextSize() }
+    is JsonPrimitive -> content.length
 }

@@ -70,7 +70,7 @@ Account model discovery uses the documented `models` list and visibility/slug/di
 
 Completed `response.output_item.done` items are retained by index. Live ChatGPT streams can leave the terminal response output array empty; in that case the retained items supply calls, text and subsequent conversation context, only after successful stream completion. This behavior was reproduced and verified with a real account-backed app launch; see [live verification](VERIFICATION-LIVE-CHATGPT.md).
 
-Context compaction occurs only between completed rounds. It preserves the original task and an explicit record of attempted operation/status summaries, asks for a fresh observation, and forbids repeating uncertain actions. It is intentionally lossy: complex long tasks may need clarification. Inference/action requests are not blindly retried; token revocation has three bounded attempts. Usage is displayed only when provided, without fabricated prices.
+Context compaction occurs only between completed rounds. Its 160,000-character text budget excludes encoded image bytes, which have separate size limits. It preserves the original task, recent user context, attempted operation/status summaries and the entire latest completed tool round, including matching calls/results and current screen references. Replacing an automatic screenshot adjusts the retained-round boundary. Older history is intentionally lossy, so complex long tasks may still need clarification; uncertain actions must never be repeated blindly. Inference/action requests are not blindly retried; token revocation has three bounded attempts. Usage is displayed only when provided, without fabricated prices.
 
 ## Bounded extensions
 

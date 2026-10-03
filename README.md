@@ -28,7 +28,7 @@ The landing page lives in [`site/`](site/) in this repository and deploys indepe
 
 ## Build
 
-The installable **0.2.6 early-access APK** is available in [GitHub Releases](https://github.com/fazakis/magicphone/releases/tag/v0.2.6). Download `magicphone-0.2.6-debug.apk` for Android 11+. This is the verified development build, signed with the same Android debug certificate as the preceding QA updates; it is not production signed. The release includes checksums, signing identity, license notices and current verification limits. Install over a matching-signer build to preserve app data.
+The installable **0.2.7 early-access APK** is available in [GitHub Releases](https://github.com/fazakis/magicphone/releases/tag/v0.2.7). Download `magicphone-0.2.7-debug.apk` for Android 11+. This is the verified development build, signed with the same Android debug certificate as the preceding QA updates; it is not production signed. The release includes checksums, signing identity, license notices and current verification limits. Install over a matching-signer build to preserve app data.
 
 Prerequisites: JDK 21, Android SDK **platform 37.0**, build-tools 36.0.0, and network access for pinned build dependencies. Set `ANDROID_HOME` or create the ignored `local.properties` with `sdk.dir=...`. `targetSdk=36`, `minSdk=30`; current Compose needs `compileSdk=37`.
 
@@ -69,6 +69,8 @@ Version **0.1.3** improves local UI responsiveness with background history persi
 Version **0.1.4** adds a microphone for Android voice input, replaces the floating bar with an ongoing notification, and pauses active work when the Accessibility shortcut opens chat. Repeated Pause is safe, and keyboard focus waits for the resumed activity. See [voice and controls verification](docs/VERIFICATION-VOICE.md).
 
 Version **0.1.5** enables screenshots of MagicPhone and shows a message bubble over other apps when the agent needs an answer. Tap it to return to the requesting chat with the draft preserved, input focused and keyboard open. Send answers a waiting question without an extra Resume step. Dismiss hides that bubble; the question remains in the ongoing notification and encrypted history. Bubbles hide while the chat is visible or the screen is locked. See [bubble and screenshot verification](docs/VERIFICATION-BUBBLE.md).
+
+Version **0.2.7** fixes a regression where large screenshots could discard current tool results and screen targets during history compaction. Screenshot bytes no longer consume the text-history budget, and compaction retains the complete latest tool round. Verified against real Chrome navigation as well as the local fixture; see [0.2.7 verification](docs/VERIFICATION-0.2.7.md).
 
 Version **0.2.6** improves popup action tasks. The working bubble temporarily gets out of the way for device reads, captures and actions, then returns while the model thinks. Popup tasks refresh their screenshot after actions and observations, keeping only the latest automatic screen image in context. Malformed model tool requests receive bounded correction feedback before any operation from that response is dispatched. **Settings → Access → Check sensitive content** defaults on; turn it off to disable MagicPhone’s detected-sensitive-screen checks. With it off, visible sensitive text/images may reach the selected model. Blocked apps, screen lock, protected system controls and Android secure-window restrictions remain separate. See [0.2.6 verification](docs/VERIFICATION-0.2.6.md).
 
