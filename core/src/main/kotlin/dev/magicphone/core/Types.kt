@@ -161,19 +161,23 @@ data class Screen(
     val protectedRects: List<Rect> = emptyList(),
     val captureBounds: Rect = Rect(0, 0, 0, 0),
     // Device-filtered, visible nodes from the permitted app; never foreign overlay content.
-    // Partial does not relax focus, mixed-window or action checks.
+    // Partial does not relax lock, app permission or covered-target checks.
     val partial: Boolean = false,
     val displayId: Int = 0,
     val windowBounds: Rect = captureBounds,
     // Text collection limits are separate from the credential scan used for images.
     val captureReady: Boolean = true,
+    // Actual uncovered regions supplied by the device; an unfocused app needs these to be readable.
+    val visibleRegions: List<Rect> = emptyList(),
+    val windowLayout: String = "",
 ) {
+    val readable: Boolean get() = !locked && !mixed && (focused || visibleRegions.isNotEmpty())
     val captureBinding: String
-        get() = "$app|$window|$displayId|$width|$height|$rotation|$focused|$locked|$mixed|$sensitive|$captureBounds|$windowBounds|$captureReady|$protectedRects"
+        get() = "$app|$window|$displayId|$width|$height|$rotation|$focused|$locked|$mixed|$sensitive|$captureBounds|$windowBounds|$captureReady|$protectedRects|$visibleRegions|$windowLayout"
 
     val binding: String
         get() =
-            "$id|$app|$window|$revision|$width|$height|$rotation|$focused|$locked|$mixed|$sensitive|$captureBounds|$partial|$protectedRects|$displayId|$windowBounds|$captureReady"
+            "$id|$app|$window|$revision|$width|$height|$rotation|$focused|$locked|$mixed|$sensitive|$captureBounds|$partial|$protectedRects|$displayId|$windowBounds|$captureReady|$visibleRegions|$windowLayout"
 }
 
 @Serializable

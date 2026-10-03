@@ -108,6 +108,20 @@ class MainActivity : ComponentActivity() {
             field("requestedAppRead", rule.observe)
             field("requestedAppAct", rule.mutate)
             field("requestedAppDenied", rule.deny)
+            if (args.getOrNull(2) == "inspect" && runtime.agent.state.value !in setOf(RunState.PLANNING, RunState.ACTING)) {
+                val phone = runtime.phone
+                try {
+                    val screen = phone?.inspect(requestedApp)
+                    field("inspection", phone?.inspectionDiagnostics)
+                    field("screenReadable", screen?.readable == true)
+                    field("screenNodeCount", screen?.nodes?.size ?: 0)
+                    field("screenSensitive", screen?.sensitive)
+                    field("screenCaptureReady", screen?.captureReady)
+                    field("screenWindow", screen?.window)
+                } catch (e: SafeFailure) { field("inspectionFailure", e.code) }
+                field("windowMetadata", phone?.diagnosticWindows(requestedApp))
+                field("recentActionStatuses", runtime.archive.value.audits.takeLast(30).map { it.operation + ":" + it.status })
+            }
         }
     }
 
@@ -251,6 +265,7 @@ fun errorResource(code: String): Int =
         code == "voice_chat_changed" -> R.string.voice_chat_changed
         code == "empty_model_response" -> R.string.error_empty_response
         code == "accessibility_missing" -> R.string.error_accessibility
+        code == "window_not_focused" -> R.string.error_window_not_focused
         code == "protected_control" -> R.string.error_protected_control
         code in setOf("screen_uncertain", "capture_uncertain") -> R.string.error_screen_uncertain
         code in setOf("app_not_allowed", "mcp_consent", "approval_denied") ->

@@ -72,3 +72,5 @@ Homepage version and download links target v0.2.5 with popup dictation, fresh sc
 Homepage version and download links target v0.2.6 with popup action continuity and configurable sensitive-content checks.
 
 Version 0.2.7 updates the landing-page release link to the large-screenshot/action-context hotfix.
+
+Version 0.2.9 updates the landing-page download link to the general visible-window and focus-handling release.

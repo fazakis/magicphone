@@ -1,6 +1,6 @@
 # Releasing and signing
 
-Repository and GitHub Pages publication are authorized. The user also authorized publishing version 0.2.7 to GitHub Releases as a regular Latest release. It remains an early-access, debug-signed development APK; the GitHub release classification does not change its signing identity or verification limits. Future APK releases remain a separate explicit action. Original code is MIT OR Apache-2.0. Release artifacts must preserve LICENSE, LICENSE-APACHE, NOTICE and third-party notices. No production signing material is committed or used.
+Repository and GitHub Pages publication are authorized. The user also authorized publishing version 0.2.9 to GitHub Releases as a regular Latest release. It remains an early-access, debug-signed development APK; the GitHub release classification does not change its signing identity or verification limits. Future APK releases remain a separate explicit action. Original code is MIT OR Apache-2.0. Release artifacts must preserve LICENSE, LICENSE-APACHE, NOTICE and third-party notices. No production signing material is committed or used.
 
 1. Read the feature matrix and complete outstanding real-device/OAuth acceptance for the intended release audience. Review Accessibility disclosures and current store policy separately; API targeting is not store approval.
 2. Use JDK 21 and SDK platform 37.0, build-tools 36.0.0. Verify wrapper with `shasum -a 256 -c gradle/wrapper/gradle-wrapper.jar.sha256`. The distribution checksum is enforced by Gradle.

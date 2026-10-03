@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 BUILD_HOST=$MAGICPHONE_BUILD_HOST
 BUILD_PATH=magicphone-build
 rsync -az --exclude .git --exclude INSTRUCTIONS.md --exclude .gradle --exclude build --exclude artifacts --exclude local.properties ./ "$BUILD_HOST:$BUILD_PATH/"
-ssh "$BUILD_HOST" 'cd ~/magicphone-build && export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" && ./gradlew :core:test :app:assembleDebug :app:assembleRelease :app:lint :fixture:assembleDebug --console=plain && /usr/bin/python3 tools/release-check.py && /usr/bin/python3 tools/dependency-inventory.py'
+ssh "$BUILD_HOST" 'cd ~/magicphone-build && export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" ANDROID_HOME="$HOME/Library/Android/sdk" && ./gradlew :core:test :app:assembleDebug :app:assembleRelease :app:lint :fixture:assembleDebug :windowfixture:assembleDebug --console=plain && /usr/bin/python3 tools/release-check.py && /usr/bin/python3 tools/dependency-inventory.py'
 mkdir -p artifacts
 rsync -az "$BUILD_HOST:$BUILD_PATH/app/build/outputs/" artifacts/
 rsync -az "$BUILD_HOST:$BUILD_PATH/core/build/reports/" artifacts/core-reports/

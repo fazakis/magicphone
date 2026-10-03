@@ -176,6 +176,20 @@ class PhoneService : AccessibilityService() {
         return screen
     }
 
+    /** Debug shell diagnostics: window geometry/ownership flags only, never screen text. */
+    fun diagnosticWindows(requested: String): String {
+        if (!BuildConfig.DEBUG) return ""
+        return windows.joinToString(";") { w ->
+            val rect = android.graphics.Rect(); w.getBoundsInScreen(rect)
+            val root = w.root
+            try {
+                val owner = root?.packageName?.toString()
+                val system = owner?.let { runCatching { packageManager.getApplicationInfo(it, 0).uid == android.os.Process.SYSTEM_UID }.getOrDefault(false) } ?: false
+                "id=${w.id},type=${w.type},layer=${w.layer},active=${w.isActive},focused=${w.isFocused},target=${owner == requested},systemUid=$system,bounds=$rect,root=${root != null}"
+            } finally { root?.recycle() }
+        }
+    }
+
     fun inspect(requested: String): Screen {
         val checks = runtime.settings.value.policy.checkSensitiveContent
         val rule = Policy(packageName).appRule(requested, runtime.settings.value.policy)
@@ -191,9 +205,9 @@ class PhoneService : AccessibilityService() {
         val roots = applications.mapNotNull { w -> w.root?.let { w to it } }
         val candidates = mutableListOf<AccessibilityNodeInfo>()
         try {
-            val selected = roots.firstOrNull { (w, n) ->
-                n.packageName?.toString() == requested && (w.isActive || w.isFocused)
-            }
+            val selected = roots.filter { (_, n) -> n.packageName?.toString() == requested }
+                .maxWithOrNull(compareBy<Pair<AccessibilityWindowInfo, AccessibilityNodeInfo>> { it.first.isFocused }
+                    .thenBy { it.first.isActive }.thenBy { it.first.layer })
             val active = roots.firstOrNull { it.first.isActive }
             val app =
                 selected?.second?.packageName?.toString()
@@ -206,60 +220,56 @@ class PhoneService : AccessibilityService() {
             val geometry = displayManager.maximumWindowMetrics.bounds
             val width = geometry.width()
             val height = geometry.height()
-            // Never traverse another application's root. Unknown overlays/multi-window
-            // remain blocked; keyboard/control pixels are masked from captured images.
-            val ownedIds = listOfNotNull(overlay, inputBubble, quickPrompt.view, workingBubble.view).filter { it.isAttachedToWindow }.mapNotNull { view ->
-                val info = view.createAccessibilityNodeInfo() ?: return@mapNotNull null
-                try { info.windowId.takeIf { it >= 0 } } finally { info.recycle() }
-            }.toSet()
-            val mixedApplications =
-                roots.any { (w, n) ->
-                    n.packageName?.toString() != requested &&
-                        w.layer >= (selected?.first?.layer ?: 0)
-                }
-            val activeSystem = windows.any { w ->
-                        w.type != AccessibilityWindowInfo.TYPE_APPLICATION &&
-                            w.type != AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY &&
-                            w.type != AccessibilityWindowInfo.TYPE_INPUT_METHOD &&
-                            w.isActive
-                    }
-            val foreignOverlay = windows.any { w ->
-                        w.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY &&
-                            w.id !in ownedIds
-                    }
-            val mixed = mixedApplications || activeSystem || foreignOverlay
-            if (BuildConfig.DEBUG) inspectionDiagnostics =
-                "root=${root != null},locked=$locked,mixedApplications=$mixedApplications," +
-                    "activeSystem=$activeSystem,foreignOverlay=$foreignOverlay," +
-                    "ownedWindows=${listOfNotNull(overlay, inputBubble, quickPrompt.view, workingBubble.view).count { it.isAttachedToWindow }}," +
-                    "overlayWindows=${windows.count { it.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY }}," +
-                    "ownedIdMatches=${windows.count { it.id in ownedIds }}"
-            if (root == null || locked || mixed) {
-                recycleRefs()
-                return Screen(
-                    app = app,
-                    width = width,
-                    height = height,
-                    locked = locked,
-                    mixed = true,
-                    focused = false,
-                )
+            fun bounds(w: AccessibilityWindowInfo): Rect {
+                val b = android.graphics.Rect(); w.getBoundsInScreen(b)
+                return Rect(b.left, b.top, b.right, b.bottom)
             }
-            // A keyboard is normal app input, not an unknown foreground app. Only read
-            // the permitted app's nodes outside it; never traverse the IME's own root.
-            val keyboardRects = windows.filter { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
-                .mapNotNull { window ->
-                    val bounds = android.graphics.Rect()
-                    window.getBoundsInScreen(bounds)
-                    if (bounds.isEmpty) null else Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
-                }
+            val selectedWindow = selected?.first
+            val windowBounds = selectedWindow?.let(::bounds) ?: Rect(0, 0, 0, 0)
+            val rootFresh = root == null || !refreshNodes || root.refresh()
+            val rootBounds = android.graphics.Rect(); root?.getBoundsInScreen(rootBounds)
+            val insets = displayManager.maximumWindowMetrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars())
+            val displayBounds = Rect(insets.left, insets.top, width - insets.right, height - insets.bottom)
+            val capture = WindowVisibility.intersection(windowBounds, Rect(rootBounds.left, rootBounds.top, rootBounds.right, rootBounds.bottom))
+                ?.let { WindowVisibility.intersection(it, displayBounds) }
+            // Read only the selected app's tree. Every higher window masks just its geometry,
+            // regardless of its owner/type/focus; even rootless foreign windows are accounted for.
+            val above = windows.filter { it.displayId == displayId && it.id != selectedWindow?.id &&
+                it.layer >= (selectedWindow?.layer ?: 0) }.sortedWith(compareBy<AccessibilityWindowInfo> { it.layer }.thenBy { it.id })
+            var unknownBounds = !rootFresh || above.any { bounds(it).let { r -> r.left >= r.right || r.top >= r.bottom } }
+            // API30-32 can retain stale window-list bounds after a move even when the root
+            // reports its new location. Refresh geometry only; never traverse foreign content.
+            // Keep both rectangles until window metadata catches up, protecting their union.
+            // IME/system roots may describe a full-display layout although their window
+            // occupies only a keyboard/bar rectangle. Their window bounds remain authoritative.
+            val refreshedCovers = if (!refreshNodes) emptyList() else above.filter {
+                it.type == AccessibilityWindowInfo.TYPE_APPLICATION
+            }.mapNotNull { window ->
+                val otherRoot = window.root ?: return@mapNotNull null
+                try {
+                    if (!otherRoot.refresh()) { unknownBounds = true; return@mapNotNull null }
+                    val b = android.graphics.Rect(); otherRoot.getBoundsInScreen(b)
+                    Rect(b.left, b.top, b.right, b.bottom).takeIf { it.left < it.right && it.top < it.bottom }
+                } finally { otherRoot.recycle() }
+            }
             val controlRects = listOfNotNull(overlay, inputBubble, quickPrompt.view, workingBubble.view)
                 .filter { it.isAttachedToWindow }.map { view ->
-                    val pos = IntArray(2)
-                    view.getLocationOnScreen(pos)
+                    val pos = IntArray(2); view.getLocationOnScreen(pos)
                     Rect(pos[0], pos[1], pos[0] + view.width, pos[1] + view.height)
                 }
-            val rects = keyboardRects + controlRects
+            val rects = (above.map(::bounds) + refreshedCovers + controlRects).mapNotNull { cover ->
+                capture?.let { WindowVisibility.intersection(it, cover) }
+            }.distinct().sortedWith(compareBy<Rect> { it.top }.thenBy { it.left }.thenBy { it.bottom }.thenBy { it.right })
+            val visibleRegions = capture?.let { WindowVisibility.exposed(it, rects) }.orEmpty()
+            val mixed = unknownBounds || visibleRegions.isEmpty()
+            val windowLayout = digest(above.joinToString(";") { "${it.id}:${it.type}:${it.layer}:${it.isFocused}:${bounds(it)}" } + refreshedCovers)
+            if (BuildConfig.DEBUG) inspectionDiagnostics =
+                "root=${root != null},locked=$locked,mixed=$mixed,focused=${selectedWindow?.isFocused}," +
+                    "coverWindows=${above.size},maskedRects=${rects.size},visibleRegions=${visibleRegions.size},unknownBounds=$unknownBounds"
+            if (root == null || locked || mixed || capture == null) {
+                recycleRefs()
+                return Screen(app = app, width = width, height = height, locked = locked, mixed = true, focused = false)
+            }
             val nodes = mutableListOf<Node>()
             var sensitive = false
             var partial = rects.isNotEmpty()
@@ -294,7 +304,7 @@ class PhoneService : AccessibilityService() {
                 val label = rawLabel.take(minOf(8000, (40000 - textCharacters).coerceAtLeast(0)))
                 if (label.length < rawLabel.length) partial = true
                 textCharacters += label.length
-                val covered = rects.any { it.left < r.right && it.right > r.left &&
+                val covered = WindowVisibility.intersection(Rect(r.left, r.top, r.right, r.bottom), capture) != Rect(r.left, r.top, r.right, r.bottom) || rects.any { it.left < r.right && it.right > r.left &&
                     it.top < r.bottom && it.bottom > r.top }
                 if (visible && collectText && !covered && (label.isNotBlank() || n.isClickable || n.isEditable || n.isScrollable)) {
                     nodes +=
@@ -322,26 +332,9 @@ class PhoneService : AccessibilityService() {
             }
             visit(root, 0)
             val rotation = targetDisplay?.rotation ?: 0
-            val windowBounds = android.graphics.Rect()
-            selected.first.getBoundsInScreen(windowBounds)
-            val capture = android.graphics.Rect()
-            root.getBoundsInScreen(capture)
-            val systemInsets =
-                displayManager.maximumWindowMetrics.windowInsets.getInsetsIgnoringVisibility(
-                    WindowInsets.Type.systemBars()
-                )
-            if (
-                !capture.intersect(
-                    systemInsets.left,
-                    systemInsets.top,
-                    width - systemInsets.right,
-                    height - systemInsets.bottom,
-                )
-            )
-                throw SafeFailure("capture_uncertain")
             val signature =
                 digest(
-                    "$app|${selected.first.id}|$displayId|$width|$height|$rotation|${selected.first.isFocused}|$rects|$nodes|$capture|$windowBounds|$captureReady|$checks"
+                    "$app|${selected.first.id}|$displayId|$width|$height|$rotation|${selected.first.isFocused}|$rects|$nodes|$capture|$windowBounds|$captureReady|$checks|$windowLayout"
                 )
             if (signature != lastSignature) {
                 revision++
@@ -363,7 +356,7 @@ class PhoneService : AccessibilityService() {
                     width,
                     height,
                     rotation,
-                    selected.first.isActive || selected.first.isFocused,
+                    selected.first.isFocused,
                     locked,
                     false,
                     sensitive,
@@ -374,6 +367,8 @@ class PhoneService : AccessibilityService() {
                     displayId = displayId,
                     windowBounds = Rect(windowBounds.left, windowBounds.top, windowBounds.right, windowBounds.bottom),
                     captureReady = !checks || captureReady,
+                    visibleRegions = visibleRegions,
+                    windowLayout = windowLayout,
                 )
                 .also { lastScreen = it }
         } finally {
@@ -431,7 +426,14 @@ class PhoneService : AccessibilityService() {
             when (action.op) {
                 Op.SCREENSHOT -> return screenshot(action.app, latest)
                 Op.TAP ->
-                    if (node != null) node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    if (!latest.focused) {
+                        // A physical tap respects window hit testing/modal behavior and can focus
+                        // the target. Never invoke a background node's semantic action directly.
+                        val bounds = latest.nodes.find { it.ref == action.node }?.bounds
+                        val x = bounds?.let { (it.left + it.right) / 2 } ?: action.x
+                        val y = bounds?.let { (it.top + it.bottom) / 2 } ?: action.y
+                        gesture(x, y, x, y, 80)
+                    } else if (node != null) node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                     else gesture(action.x, action.y, action.x, action.y, 80)
                 Op.LONG_PRESS ->
                     if (node != null) node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
@@ -466,7 +468,8 @@ class PhoneService : AccessibilityService() {
         if (accepted) awaitSettled(action.app, 350)
         return ToolResult(
             if (accepted) "dispatched" else "failed",
-            if (accepted) "Android accepted the action; observe to verify."
+            if (accepted && !latest.focused) "A visible-window tap was dispatched. It may focus the window or dismiss a modal surface; inspect the fresh observation before continuing."
+            else if (accepted) "Android accepted the action; observe to verify."
             else "Android rejected the action.",
         )
     }
@@ -500,7 +503,7 @@ class PhoneService : AccessibilityService() {
         }
 
     private suspend fun screenshot(pkg: String, before: Screen): ToolResult {
-        if (before.mixed || before.sensitive || before.locked || !before.focused || !before.captureReady)
+        if (!before.readable || before.sensitive || !before.captureReady)
             throw SafeFailure("capture_uncertain")
         return suspendCancellableCoroutine { continuation ->
             val windowCapture = Build.VERSION.SDK_INT >= 34

@@ -384,7 +384,7 @@ class Agent(
                                         // recover an ambiguous dispatch/network failure this way.
                                         if (action.isDevice && e.code in setOf(
                                             "stale_target", "stale_approval", "approval_expired",
-                                            "screen_uncertain", "protected_control", "capture_uncertain",
+                                            "screen_uncertain", "protected_control", "capture_uncertain", "window_not_focused",
                                             "fresh_observation_required", "invalid_action", "invalid_target", "invalid_coordinates",
                                         )) {
                                             staleApps += action.app
@@ -397,7 +397,7 @@ class Agent(
                                                 "The operation was rejected before execution. Remaining proposed actions are cancelled. " +
                                                     "OBSERVE ${action.app} again, then choose a new action using its fresh snapshot and node references. " +
                                                     "Do not replay the old action. Local policy handles any approval; do not ask separately. " +
-                                                    "For protected_control use an unobstructed semantic target or coordinates outside MagicPhone controls. " +
+                                                    "For protected_control use a visible target inside visibleRegions and outside all covered areas. For window_not_focused TAP a visible target to focus the app, then use the fresh observation before other actions. " +
                                                     "For invalid_action/invalid_target/invalid_coordinates correct the tool parameters against the fresh screen. " +
                                                     "Continue using visible content from a partial observation. Do not ask the user to dismiss overlays or restart. " +
                                                     "Never claim an unobserved outcome or invent hidden content.")

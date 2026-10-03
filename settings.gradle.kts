@@ -4,4 +4,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "MagicPhone"
-include(":core", ":app", ":fixture")
+include(":core", ":app", ":fixture", ":windowfixture")

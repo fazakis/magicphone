@@ -7,7 +7,7 @@ class ScreenStability(private val quietMillis: Long = 80) {
     private var since = 0L
 
     fun ready(screen: Screen?, now: Long): Boolean {
-        if (screen == null || screen.id.isBlank() || !screen.focused || screen.locked || screen.mixed || screen.sensitive) {
+        if (screen == null || screen.id.isBlank() || !screen.readable || screen.sensitive) {
             binding = null
             return false
         }

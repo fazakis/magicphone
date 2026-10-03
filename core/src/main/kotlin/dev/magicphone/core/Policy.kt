@@ -55,8 +55,12 @@ class Policy(private val ownPackage: String) {
             return Decision.Deny("app_not_allowed")
         if (screen.locked) return Decision.Deny("device_locked")
         if (action.op != Op.OPEN) {
-            if (screen.mixed || !screen.focused || screen.app != action.app)
+            if (!screen.readable || screen.app != action.app)
                 return Decision.Deny("screen_uncertain")
+            // Only a normal tap may bring a visible background window into focus.
+            // Text, long press, scrolling and global navigation wait for a fresh focused observation.
+            if (!screen.focused && action.op.mutates && action.op != Op.TAP)
+                return Decision.Deny("window_not_focused")
             if (config.checkSensitiveContent && screen.sensitive) return Decision.Deny("manual_secret")
             // Global navigation and coordinate dispatch are still scoped to the default display.
             // A read may use the selected window on another display without authorizing actions there.
@@ -73,6 +77,9 @@ class Policy(private val ownPackage: String) {
                 if (action.op == Op.TEXT && !node.editable) return Decision.Deny("invalid_target")
                 if (action.op == Op.SCROLL && !node.scrollable)
                     return Decision.Deny("invalid_target")
+                if (screen.visibleRegions.isNotEmpty() && screen.visibleRegions.none {
+                    it.contains((node.bounds.left + node.bounds.right) / 2, (node.bounds.top + node.bounds.bottom) / 2)
+                }) return Decision.Deny("protected_control")
                 if (
                     screen.protectedRects.any {
                         it.contains(
@@ -84,6 +91,10 @@ class Policy(private val ownPackage: String) {
                     return Decision.Deny("protected_control")
             }
             if (action.coordinate) {
+                if (screen.visibleRegions.isNotEmpty() &&
+                    (screen.visibleRegions.none { it.contains(action.x, action.y) } ||
+                        (action.op == Op.SWIPE && screen.visibleRegions.none { it.contains(action.x2, action.y2) })))
+                    return Decision.Deny("protected_control")
                 if (
                     action.x >= screen.width ||
                         action.y >= screen.height ||

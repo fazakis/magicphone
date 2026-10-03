@@ -105,7 +105,7 @@
     <string name="error_accessibility">Enable Accessibility manually and retry.</string>
     <string name="error_policy">This action is blocked by your current app permissions. Review Settings → Access or Apps.</string>
     <string name="error_stale">The screen kept changing while choosing an action. Wait for it to settle, then retry the task.</string>
-    <string name="error_protected_control">The action overlaps a MagicPhone approval control. Review or dismiss the approval, then retry.</string>
+    <string name="error_protected_control">The target is covered by another window or outside the visible app area. Choose an unobstructed target.</string>
     <string name="error_screen_uncertain">The app screen cannot be read reliably. Close any popup, keyboard, notification shade or other overlay, keep the app visible, then retry.</string>
     <string name="error_secret">A password field is visible. Complete the sign-in step manually.</string>
     <string name="error_session">Sign in again; your session is missing or expired.</string>
@@ -223,4 +223,5 @@
     <string name="error_action_target">The requested control or action could not be matched to the current screen.</string>
     <string name="error_run_budget">The task reached its action or recovery limit. Check the latest observed result before continuing.</string>
     <string name="error_model_action">The model repeatedly returned an invalid action request. No action from those responses was executed.</string>
+    <string name="error_window_not_focused">Tap the visible app window to focus it before continuing.</string>
 </resources>

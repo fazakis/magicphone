@@ -28,12 +28,12 @@ The landing page lives in [`site/`](site/) in this repository and deploys indepe
 
 ## Build
 
-The installable **0.2.7 early-access APK** is available in [GitHub Releases](https://github.com/fazakis/magicphone/releases/tag/v0.2.7). Download `magicphone-0.2.7-debug.apk` for Android 11+. This is the verified development build, signed with the same Android debug certificate as the preceding QA updates; it is not production signed. The release includes checksums, signing identity, license notices and current verification limits. Install over a matching-signer build to preserve app data.
+The installable **0.2.9 early-access APK** is available in [GitHub Releases](https://github.com/fazakis/magicphone/releases/tag/v0.2.9). Download `magicphone-0.2.9-debug.apk` for Android 11+. This is the verified development build, signed with the same Android debug certificate as the preceding QA updates; it is not production signed. The release includes checksums, signing identity, license notices and current verification limits. Install over a matching-signer build to preserve app data.
 
 Prerequisites: JDK 21, Android SDK **platform 37.0**, build-tools 36.0.0, and network access for pinned build dependencies. Set `ANDROID_HOME` or create the ignored `local.properties` with `sdk.dir=...`. `targetSdk=36`, `minSdk=30`; current Compose needs `compileSdk=37`.
 
 ```sh
-./gradlew :core:test :app:lint :app:assembleDebug :app:assembleRelease :fixture:assembleDebug
+./gradlew :core:test :app:lint :app:assembleDebug :app:assembleRelease :fixture:assembleDebug :windowfixture:assembleDebug
 python3 tools/release-check.py
 ```
 
@@ -44,6 +44,7 @@ Build outputs:
 - `app/build/outputs/apk/debug/app-debug.apk`: signed with the build machine's Android debug key.
 - `app/build/outputs/apk/release/app-release-unsigned.apk`: **unsigned** release build.
 - `fixture/build/outputs/apk/debug/fixture-debug.apk`: isolated practice app, debug signed.
+- `windowfixture/build/outputs/apk/debug/windowfixture-debug.apk`: separate synthetic window app for emulator tests only.
 - `app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk`: test harness only; do not distribute as the app.
 
 This working session also retrieves outputs to ignored `artifacts/`. `tools/remote-build.sh` is an optional developer build helper for the explicitly supplied SSH host; it is not part of the Android runtime and does not publish anything.
@@ -70,7 +71,7 @@ Version **0.1.4** adds a microphone for Android voice input, replaces the floati
 
 Version **0.1.5** enables screenshots of MagicPhone and shows a message bubble over other apps when the agent needs an answer. Tap it to return to the requesting chat with the draft preserved, input focused and keyboard open. Send answers a waiting question without an extra Resume step. Dismiss hides that bubble; the question remains in the ongoing notification and encrypted history. Bubbles hide while the chat is visible or the screen is locked. See [bubble and screenshot verification](docs/VERIFICATION-BUBBLE.md).
 
-Version **0.2.7** fixes a regression where large screenshots could discard current tool results and screen targets during history compaction. Screenshot bytes no longer consume the text-history budget, and compaction retains the complete latest tool round. Verified against real Chrome navigation as well as the local fixture; see [0.2.7 verification](docs/VERIFICATION-0.2.7.md).
+Version **0.2.9** handles overlapping and split-screen windows by their visible areas. MagicPhone can read a visible app without focus, tap to focus it, then continue from a fresh observation. Covered pixels and targets remain excluded. This also generalizes the Xiaomi system-caption fix confirmed on a physical MIX Fold 2. See [0.2.9 verification](docs/VERIFICATION-0.2.9.md).
 
 Version **0.2.6** improves popup action tasks. The working bubble temporarily gets out of the way for device reads, captures and actions, then returns while the model thinks. Popup tasks refresh their screenshot after actions and observations, keeping only the latest automatic screen image in context. Malformed model tool requests receive bounded correction feedback before any operation from that response is dispatched. **Settings → Access → Check sensitive content** defaults on; turn it off to disable MagicPhone’s detected-sensitive-screen checks. With it off, visible sensitive text/images may reach the selected model. Blocked apps, screen lock, protected system controls and Android secure-window restrictions remain separate. See [0.2.6 verification](docs/VERIFICATION-0.2.6.md).
 
