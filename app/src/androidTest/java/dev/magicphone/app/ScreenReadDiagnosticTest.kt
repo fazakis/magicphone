@@ -112,7 +112,8 @@ class ScreenReadDiagnosticTest {
                 return Reply("Diagnostic input recorded.", emptyList(), emptyList())
             }
         }
-        main { r.agent.start(r.scope, provider, "Read the visible document", screenContext = pkg) }
+        // Match current-screen popup submission, including its bounded capture recovery.
+        main { r.agent.start(r.scope, provider, "Read the visible document", screenContext = pkg, captureScreen = true) }
         val data = runBlocking { withTimeout(15000) { result.await() } }
         await("Diagnostic finished, error=${r.agent.error.value}") { r.agent.state.value == RunState.COMPLETED }
         return data

@@ -8,6 +8,8 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 
+enum class ScreenCaptureState { NONE, CAPTURING, CAPTURED, UNAVAILABLE }
+
 data class ActionSummary(val operation: Op, val app: String, val status: String)
 
 @Serializable
@@ -31,6 +33,8 @@ class Agent(
 ) {
     val state = MutableStateFlow(RunState.IDLE)
     val stream = MutableStateFlow("")
+    val screenCapture = MutableStateFlow(ScreenCaptureState.NONE)
+    val activeTool = MutableStateFlow<Op?>(null)
     val checklist = MutableStateFlow<List<String>>(emptyList())
     val actions = MutableStateFlow<List<ActionSummary>>(emptyList())
     val question = MutableStateFlow("")
@@ -74,6 +78,8 @@ class Agent(
         job?.cancel()
         if (wasActive) state.value = RunState.STOPPED
         question.value = ""
+        screenCapture.value = ScreenCaptureState.NONE
+        activeTool.value = null
     }
 
     fun clearView() {
@@ -98,6 +104,7 @@ class Agent(
         script: Pair<Script, Map<String, String>>? = null,
         optimize: Boolean = false,
         screenContext: String = "",
+        captureScreen: Boolean = false,
     ) {
         stop()
         val runEpoch = epoch
@@ -110,6 +117,7 @@ class Agent(
         checklist.value = emptyList()
         actions.value = emptyList()
         state.value = RunState.PLANNING
+        screenCapture.value = if (screenContext.isNotBlank()) ScreenCaptureState.CAPTURING else ScreenCaptureState.NONE
         while (corrections.tryReceive().isSuccess) {
             /* discard prior-run steering */
         }
@@ -163,13 +171,14 @@ class Agent(
                             "Do not ask the user to close overlays or restart for this temporary limitation. " +
                             "Do not invent hidden content or repeat an action that was already dispatched.")
                     suspend fun runTool(action: Action): ToolResult {
+                        activeTool.value = action.op
                         val result = try { timed("tool", action.op) { gateway.run(action) } }
                         catch (e: SafeFailure) {
                             if (action.op !in setOf(Op.OBSERVE, Op.SCREENSHOT) || e.code !in setOf(
                                 "screen_uncertain", "capture_uncertain", "stale_target", "screenshot_throttled", "screenshot_failed")) throw e
                             warnRead()
                             return readUnavailable(e.code)
-                        }
+                        } finally { if (runEpoch == epoch) activeTool.value = null }
                         if (action.op == Op.OBSERVE && result.status == "observed" &&
                             JsonCodec.decodeFromString<Screen>(result.content).partial) warnRead()
                         return result
@@ -200,10 +209,26 @@ class Agent(
                                 throw SafeFailure("screen_context_changed")
                             val observed = observe(screenContext)
                             initial += observed
-                            if (provider.supportsImages && observed.first().status == "observed") {
-                                val screen = JsonCodec.decodeFromString<Screen>(observed.first().content)
-                                initial += runTool(Action(Op.SCREENSHOT, screenContext, screen.id))
-                            }
+                            if (captureScreen || (provider.supportsImages && observed.first().status == "observed")) {
+                                val snapshot = observed.first().takeIf { it.status == "observed" }
+                                    ?.let { JsonCodec.decodeFromString<Screen>(it.content).id } ?: "current-screen"
+                                val action = Action(Op.SCREENSHOT, screenContext, snapshot)
+                                var shot = runTool(action)
+                                // Retry reads only, before the first model call. No normal-path wait.
+                                // Android's capture rate limit and closing keyboard can be transient.
+                                if (captureScreen) for (wait in listOf(350L, 700L)) {
+                                    if (shot.status != "observation_unavailable") break
+                                    delay(wait)
+                                    if (gateway.permittedForegroundPackage() != screenContext)
+                                        throw SafeFailure("screen_context_changed")
+                                    shot = runTool(action)
+                                }
+                                initial += if (provider.supportsImages) shot else shot.copy(image = null)
+                                if (!provider.supportsImages) initial += ToolResult("text_only_model",
+                                    "The screen was captured locally, but this model accepts text only. Use the supplied text; no image was sent.")
+                                record(action, shot)
+                                screenCapture.value = if (shot.image != null) ScreenCaptureState.CAPTURED else ScreenCaptureState.UNAVAILABLE
+                            } else screenCapture.value = ScreenCaptureState.UNAVAILABLE
                             context += message("user", "I invoked MagicPhone on the currently open screen in $screenContext. " +
                                 "Use the supplied screen as the starting context for my request; do not reopen the app unnecessarily. " +
                                 "For a completed answer use COMPLETE with the full answer, including any requested translation. " +
@@ -431,6 +456,7 @@ class Agent(
                 }
                 throw e
             } catch (e: Exception) {
+                if (runEpoch != epoch) return@launch
                 error.value = (e as? SafeFailure)?.code ?: "operation_failed"
                 state.value = RunState.FAILED
                 persist(error.value, state.value)

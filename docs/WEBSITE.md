@@ -62,3 +62,7 @@ Homepage version and download links now target v0.2.3. Existing screenshots, dis
 ## 0.2.4 download update (2026-10-02)
 
 Homepage version and download links target v0.2.4. Local links and the release URL are checked as part of publication.
+
+## 0.2.5 download update (2026-10-03)
+
+Homepage version and download links target v0.2.5 with popup dictation, fresh screen context and progress controls. Publication verification checks the deployed page and release URL.

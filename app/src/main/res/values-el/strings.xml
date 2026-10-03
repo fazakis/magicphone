@@ -209,4 +209,12 @@
     <string name="error_manual_security">Αυτή η οθόνη συστήματος ή αδειών χρειάζεται χειροκίνητη εισαγωγή.</string>
     <string name="error_device_locked">Ξεκλειδώστε τη συσκευή σας για να συνεχίσετε.</string>
     <string name="error_secure_window">Αυτή η εφαρμογή αποκλείει τη λήψη στιγμιότυπων οθόνης.</string>
+    <string name="working_title">Το MagicPhone εργάζεται</string>
+    <string name="working_progress">Πρόοδος εργασίας</string>
+    <string name="working_stop">Διακοπή εργασίας</string>
+    <string name="working_thinking">Σκέφτομαι…</string>
+    <string name="working_reading">Διαβάζω την οθόνη…</string>
+    <string name="working_opening">Ανοίγω την εφαρμογή…</string>
+    <string name="working_acting">Εργάζομαι στην εφαρμογή…</string>
+    <string name="working_answering">Ετοιμάζω την απάντηση…</string>
 </resources>

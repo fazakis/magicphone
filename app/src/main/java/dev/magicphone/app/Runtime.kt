@@ -52,6 +52,7 @@ class AppRuntime(val app: Application) {
     val settings = MutableStateFlow(loadSettings())
     val archive = MutableStateFlow(loadArchive())
     val current = MutableStateFlow<String?>(archive.value.conversations.maxByOrNull { it.updated }?.id)
+    val popupConversation = MutableStateFlow<String?>(null)
     val visibleChat = MutableStateFlow<String?>(null)
     val inputRequest = MutableStateFlow<InputRequest?>(null)
     val resultRequest = MutableStateFlow<InputRequest?>(null)
@@ -242,6 +243,11 @@ class AppRuntime(val app: Application) {
                 settings.map { it.showTaskResultBubbles }.distinctUntilChanged()) { _, _, _, _, _ -> Unit }
                 .collect { phone?.updateControls() }
         }
+        scope.launch {
+            combine(agent.state, agent.screenCapture, agent.activeTool,
+                agent.stream.map { it.isNotBlank() }.distinctUntilChanged(), popupConversation) { _, _, _, _, _ -> Unit }
+                .collect { phone?.workingBubble?.update() }
+        }
     }
 
     private fun publishResult(state: RunState, text: String) {
@@ -322,6 +328,8 @@ class AppRuntime(val app: Application) {
     }
 
     fun stop() {
+        popupConversation.value = null
+        phone?.workingBubble?.hide()
         phone?.quickPrompt?.cancel()
         speech.stop()
         resultRequest.value = null
@@ -606,10 +614,10 @@ class AppRuntime(val app: Application) {
         saveSettings(settings.value.copy(profiles = settings.value.profiles.map { if (it.id == profile.id) updated else it }))
     }
 
-    fun start(text: String, images: List<String> = emptyList(), secondary: Boolean = false, screenContext: String = "") {
+    fun start(text: String, images: List<String> = emptyList(), secondary: Boolean = false, screenContext: String = "", fromPopup: Boolean = false) {
         if (text.isBlank()) return
         if (
-            agent.state.value in
+            !fromPopup && agent.state.value in
                 setOf(
                     RunState.ACTING,
                     RunState.PLANNING,
@@ -646,7 +654,9 @@ class AppRuntime(val app: Application) {
                 )
         stop()
         addMessage("user", text)
-        agent.start(scope, provider(p), text, history, images, optimize = p.kind != ProviderKind.MOCK, screenContext = screenContext)
+        if (fromPopup) popupConversation.value = current.value
+        agent.start(scope, provider(p), text, history, images, optimize = p.kind != ProviderKind.MOCK,
+            screenContext = screenContext, captureScreen = fromPopup)
     }
 
     fun runScript(script: Script, values: Map<String, String>) {

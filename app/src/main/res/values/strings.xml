@@ -209,4 +209,12 @@
     <string name="error_manual_security">This system or permission screen needs manual input.</string>
     <string name="error_device_locked">Unlock your device to continue.</string>
     <string name="error_secure_window">This app blocks screen capture.</string>
+    <string name="working_title">MagicPhone is working</string>
+    <string name="working_progress">Task progress</string>
+    <string name="working_stop">Stop task</string>
+    <string name="working_thinking">Thinking…</string>
+    <string name="working_reading">Reading the screen…</string>
+    <string name="working_opening">Opening the app…</string>
+    <string name="working_acting">Working in the app…</string>
+    <string name="working_answering">Preparing your answer…</string>
 </resources>

@@ -20,6 +20,12 @@ class QuickPrompt(private val service: PhoneService) {
     private var draft = ""
     private var input: EditText? = null
     private var submission: Job? = null
+    internal var pendingVoiceId: String? = null
+        private set
+    private var voiceConversation: String? = null
+    private var voiceApp = ""
+    private var voiceReturn: Job? = null
+    internal val voiceActive get() = pendingVoiceId != null || voiceReturn?.isActive == true
     private val runtime get() = service.runtime
     private val manager get() = service.getSystemService(WindowManager::class.java)
     private fun dp(n: Int) = (n * service.resources.displayMetrics.density).toInt()
@@ -37,6 +43,7 @@ class QuickPrompt(private val service: PhoneService) {
         isClickable = true; isFocusable = true; filterTouchesWhenObscured = true
     }
     fun show() {
+        if (pendingVoiceId != null) return
         if (view != null) { input?.requestFocus(); keyboard(); return }
         if (service.getSystemService(KeyguardManager::class.java).isKeyguardLocked ||
             !service.getSystemService(PowerManager::class.java).isInteractive) return
@@ -45,6 +52,7 @@ class QuickPrompt(private val service: PhoneService) {
             service.startActivity(MainActivity.chatIntent(service)); return
         }
         runtime.pauseForChat()
+        service.workingBubble.hide()
         service.hideInputBubble()
         val field = EditText(service).apply {
             hint = service.getString(R.string.quick_prompt_hint)
@@ -74,7 +82,19 @@ class QuickPrompt(private val service: PhoneService) {
                     setOnClickListener { hide() } }, LinearLayout.LayoutParams(dp(48), dp(48)))
             })
             addView(text(R.string.quick_prompt_context).apply { textSize = 12f })
-            addView(field, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(12) })
+            addView(LinearLayout(service).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                addView(field, LinearLayout.LayoutParams(0, -2, 1f))
+                addView(ImageButton(service).apply {
+                    setImageResource(R.drawable.ic_mic)
+                    imageTintList = android.content.res.ColorStateList.valueOf(0xffb8f3d1.toInt())
+                    contentDescription = service.getString(R.string.voice_input)
+                    background = android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x338fffff),
+                        GradientDrawable().apply { setColor(0xff254d46.toInt()); cornerRadius = dp(24).toFloat() }, null)
+                    filterTouchesWhenObscured = true
+                    setOnClickListener { beginVoice(app) }
+                }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginStart = dp(6) })
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(12) })
             addView(LinearLayout(service).apply {
                 addView(button(R.string.task_result_open).apply {
                     setOnClickListener {
@@ -92,14 +112,15 @@ class QuickPrompt(private val service: PhoneService) {
                         val conversation = runtime.current.value
                         hide(); draft = ""
                         submission = runtime.scope.launch {
-                            // Let the keyboard and our own protected overlay leave the screen first.
-                            delay(350)
+                            // Capture only after the prompt and keyboard leave; normal submissions
+                            // do not pay a fixed wait when those surfaces have already disappeared.
+                            service.awaitPromptHidden()
                             if (runtime.current.value != conversation) return@launch
                             if (service.foregroundPackage() != app || service.getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
                                 Toast.makeText(service, R.string.screen_context_changed, Toast.LENGTH_LONG).show(); return@launch
                             }
                             submission = null
-                            runtime.start(value, screenContext = app)
+                            runtime.start(value, screenContext = app, fromPopup = true)
                             if (runtime.agent.state.value == RunState.PAUSED) runtime.agent.resume()
                         }
                     }
@@ -132,5 +153,43 @@ class QuickPrompt(private val service: PhoneService) {
         view?.let { runCatching { manager.removeView(it) } }
         view = null; input = null
     }
-    fun cancel() { submission?.cancel(); submission = null; hide() }
+    private fun beginVoice(app: String) {
+        if (pendingVoiceId != null) return
+        val token = id()
+        pendingVoiceId = token; voiceConversation = runtime.current.value; voiceApp = app
+        hide()
+        try {
+            service.startActivity(Intent(service, PopupVoiceActivity::class.java)
+                .putExtra("voice_session", token).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: RuntimeException) { finishVoice(token, null, R.string.voice_unavailable) }
+    }
+    internal fun finishVoice(token: String, transcript: String?, error: Int? = null) {
+        if (token != pendingVoiceId) return
+        val conversation = voiceConversation
+        val app = voiceApp
+        pendingVoiceId = null
+        if (runtime.current.value != conversation) return
+        if (!transcript.isNullOrBlank()) draft = listOf(draft.trimEnd(), transcript.trim()).filter { it.isNotEmpty() }.joinToString(" ").take(8000)
+        val notice = error ?: if (transcript != null && transcript.isBlank()) R.string.voice_empty else null
+        if (notice != null) Toast.makeText(service, notice, Toast.LENGTH_LONG).show()
+        voiceReturn?.cancel()
+        voiceReturn = runtime.scope.launch {
+            // Let the recognizer and private bridge finish before restoring the same screen's prompt.
+            repeat(20) {
+                delay(50)
+                if (runtime.current.value != conversation) return@launch
+                if (service.foregroundPackage() == app) {
+                    voiceReturn = null
+                    show()
+                    return@launch
+                }
+            }
+            voiceReturn = null // Keep the draft for the next local shortcut; never reopen another app.
+        }
+    }
+    fun cancel() {
+        submission?.cancel(); submission = null
+        pendingVoiceId = null; voiceReturn?.cancel(); voiceReturn = null
+        hide()
+    }
 }

@@ -34,9 +34,10 @@ class PhoneService : AccessibilityService() {
     private var bubbleRequest: String? = null
     private var dismissedRequest: String? = null
     val quickPrompt by lazy { QuickPrompt(this) }
+    val workingBubble by lazy { WorkingBubble(this) }
+    internal val hasPromptOrReply get() = overlay != null || inputBubble != null || quickPrompt.view != null || quickPrompt.voiceActive
     private var bubbleSpeech: TextView? = null
     private var speechObserver: Job? = null
-    private var lastShot = 0L
     private var screenReceiver: BroadcastReceiver? = null
     private val shortcut = object : AccessibilityButtonController.AccessibilityButtonCallback() {
         override fun onClicked(controller: AccessibilityButtonController) {
@@ -58,11 +59,12 @@ class PhoneService : AccessibilityService() {
                 override fun onReceive(context: Context, intent: Intent) {
                     if (intent.action == Intent.ACTION_SCREEN_OFF) {
                         hideInputBubble()
+                        workingBubble.hide()
                         quickPrompt.cancel()
                         runtime.speech.stop()
                         runtime.localApproval(false)
                         runtime.agent.pause()
-                    } else updateInputBubble()
+                    } else updateControls()
                 }
             }
         screenReceiver = receiver
@@ -88,7 +90,7 @@ class PhoneService : AccessibilityService() {
             runtime.speech.stop()
             hideInputBubble()
         } else if (event?.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-                AccessibilityEvent.TYPE_WINDOWS_CHANGED)) updateInputBubble()
+                AccessibilityEvent.TYPE_WINDOWS_CHANGED)) { updateInputBubble(); workingBubble.update() }
     }
 
     override fun onInterrupt() {
@@ -102,6 +104,7 @@ class PhoneService : AccessibilityService() {
         speechObserver?.cancel()
         runtime.speech.shutdown()
         runtime.stop()
+        workingBubble.hide()
         runtime.phone = null
         runtime.connected.value = false
         screenReceiver?.let { unregisterReceiver(it) }
@@ -115,6 +118,14 @@ class PhoneService : AccessibilityService() {
     private fun recycleRefs() {
         refs.values.forEach { it.recycle() }
         refs.clear()
+    }
+
+    suspend fun awaitPromptHidden() {
+        repeat(16) {
+            if (windows.none { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD ||
+                    (it.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY && it.isFocused) }) return
+            delay(50)
+        }
     }
 
     fun foregroundPackage(): String {
@@ -177,7 +188,7 @@ class PhoneService : AccessibilityService() {
             val height = geometry.height()
             // Never traverse another application's root. Unknown overlays/multi-window
             // remain blocked; keyboard/control pixels are masked from captured images.
-            val ownedIds = listOfNotNull(overlay, inputBubble, quickPrompt.view).filter { it.isAttachedToWindow }.mapNotNull { view ->
+            val ownedIds = listOfNotNull(overlay, inputBubble, quickPrompt.view, workingBubble.view).filter { it.isAttachedToWindow }.mapNotNull { view ->
                 val info = view.createAccessibilityNodeInfo() ?: return@mapNotNull null
                 try { info.windowId.takeIf { it >= 0 } } finally { info.recycle() }
             }.toSet()
@@ -200,7 +211,7 @@ class PhoneService : AccessibilityService() {
             if (BuildConfig.DEBUG) inspectionDiagnostics =
                 "root=${root != null},locked=$locked,mixedApplications=$mixedApplications," +
                     "activeSystem=$activeSystem,foreignOverlay=$foreignOverlay," +
-                    "ownedWindows=${listOfNotNull(overlay, inputBubble, quickPrompt.view).count { it.isAttachedToWindow }}," +
+                    "ownedWindows=${listOfNotNull(overlay, inputBubble, quickPrompt.view, workingBubble.view).count { it.isAttachedToWindow }}," +
                     "overlayWindows=${windows.count { it.type == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY }}," +
                     "ownedIdMatches=${windows.count { it.id in ownedIds }}"
             if (root == null || locked || mixed) {
@@ -222,7 +233,7 @@ class PhoneService : AccessibilityService() {
                     window.getBoundsInScreen(bounds)
                     if (bounds.isEmpty) null else Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
                 }
-            val controlRects = listOfNotNull(overlay, inputBubble, quickPrompt.view)
+            val controlRects = listOfNotNull(overlay, inputBubble, quickPrompt.view, workingBubble.view)
                 .filter { it.isAttachedToWindow }.map { view ->
                     val pos = IntArray(2)
                     view.getLocationOnScreen(pos)
@@ -467,11 +478,8 @@ class PhoneService : AccessibilityService() {
         }
 
     private suspend fun screenshot(pkg: String, before: Screen): ToolResult {
-        if (SystemClock.elapsedRealtime() - lastShot < 1200)
-            throw SafeFailure("screenshot_throttled")
         if (before.mixed || before.sensitive || before.locked || !before.focused || !before.captureReady)
             throw SafeFailure("capture_uncertain")
-        lastShot = SystemClock.elapsedRealtime()
         return suspendCancellableCoroutine { continuation ->
             val windowCapture = Build.VERSION.SDK_INT >= 34
             val callback = object : TakeScreenshotCallback {
@@ -593,6 +601,7 @@ class PhoneService : AccessibilityService() {
     }
 
     fun showApproval(approval: Approval) {
+        workingBubble.hide()
         hideInputBubble()
         hideApproval()
         overlay =
@@ -642,6 +651,7 @@ class PhoneService : AccessibilityService() {
         }
         TaskNotifications.update(this, state, request)
         updateInputBubble()
+        workingBubble.update()
     }
 
     fun hideInputBubble() {
@@ -765,8 +775,9 @@ class PhoneService : AccessibilityService() {
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
         quickPrompt.cancel()
+        workingBubble.hide()
         hideInputBubble()
-        updateInputBubble()
+        updateControls()
     }
 
 }
