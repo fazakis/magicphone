@@ -4,7 +4,7 @@ package dev.magicphone.core
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
 
-data class Call(val id: String, val actions: List<Action>)
+data class Call(val id: String, val actions: List<Action>, val validationError: String = "")
 
 data class Reply(
     val text: String,
@@ -90,6 +90,15 @@ object ToolSchema {
                 "strict" to JsonPrimitive(false),
             ),
         )
+
+    fun decodeCall(id: String, name: String, arguments: String, namespace: String = "phone"): Call {
+        if (id.isBlank() || id.length > 200) throw SafeFailure("invalid_stream")
+        return try {
+            require(namespace == "phone")
+            Call(id, calls(name, arguments))
+        } catch (_: IllegalArgumentException) { Call(id, emptyList(), "invalid_model_action")
+        } catch (_: SafeFailure) { Call(id, emptyList(), "invalid_model_action") }
+    }
 
     fun calls(name: String, arguments: String): List<Action> {
         require(arguments.length <= 64_000)
@@ -251,8 +260,7 @@ class ResponsesProvider(
             val o = item.jsonObject
             if (o.str("type") != "function_call") null
             else {
-                require(o.str("namespace", "phone") == "phone")
-                Call(o.str("call_id"), ToolSchema.calls(o.str("name"), o.str("arguments")))
+                ToolSchema.decodeCall(o.str("call_id"), o.str("name"), o.str("arguments"), o.str("namespace", "phone"))
             }
         }
         return Reply(
@@ -415,10 +423,7 @@ class CompatibleProvider(private val profile: Profile, private val secret: () ->
                         "name" to j(c.getValue("name")),
                         "arguments" to j(c.getValue("arguments")),
                     )
-                Call(
-                    c.getValue("id"),
-                    ToolSchema.calls(c.getValue("name"), c.getValue("arguments")),
-                )
+                ToolSchema.decodeCall(c.getValue("id"), c.getValue("name"), c.getValue("arguments"))
             }
         return Reply(text.toString(), parsed, output)
     }

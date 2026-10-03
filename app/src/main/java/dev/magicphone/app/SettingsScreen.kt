@@ -130,6 +130,14 @@ fun SettingsPage(r: AppRuntime) {
                         Info(s(R.string.task_result_bubbles_help))
                     }
                     BoxCard {
+                        Row(Modifier.fillMaxWidth().toggleable(value = settings.policy.checkSensitiveContent, role = Role.Switch,
+                            onValueChange = r::setSensitiveContentChecks), verticalAlignment = Alignment.CenterVertically) {
+                            Text(s(R.string.sensitive_checks), Modifier.weight(1f))
+                            Switch(settings.policy.checkSensitiveContent, onCheckedChange = null)
+                        }
+                        Info(s(R.string.sensitive_checks_help))
+                    }
+                    BoxCard {
                         Text(s(R.string.all_apps_title), style = MaterialTheme.typography.titleMedium)
                         Info(s(R.string.all_apps_help))
                         AutomationDisclaimer()

@@ -120,6 +120,25 @@ class PhoneService : AccessibilityService() {
         refs.clear()
     }
 
+    suspend fun <T> withProgressHidden(block: suspend () -> T): T {
+        var suspended = false
+        try {
+            withContext(Dispatchers.Main.immediate) {
+                val window = workingBubble.suspendForTool()
+                suspended = true
+                if (window != null) {
+                    // Wait only for our removed window to leave Android's window list.
+                    var polls = 0
+                    while (windows.any { it.id == window } && polls++ < 12) delay(16)
+                    if (windows.any { it.id == window }) throw SafeFailure("screen_uncertain")
+                }
+            }
+            return block()
+        } finally {
+            if (suspended) withContext(NonCancellable + Dispatchers.Main.immediate) { workingBubble.resumeAfterTool() }
+        }
+    }
+
     suspend fun awaitPromptHidden() {
         repeat(16) {
             if (windows.none { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD ||
@@ -158,6 +177,7 @@ class PhoneService : AccessibilityService() {
     }
 
     fun inspect(requested: String): Screen {
+        val checks = runtime.settings.value.policy.checkSensitiveContent
         val rule = Policy(packageName).appRule(requested, runtime.settings.value.policy)
         if (!rule.observe || rule.deny) throw SafeFailure("app_not_allowed")
         // Cached nodes can lag behind a visible change until Accessibility events arrive.
@@ -265,7 +285,7 @@ class PhoneService : AccessibilityService() {
                 // Invisible containers can still have visible children on some apps.
                 val visible = n.isVisibleToUser
                 val password =
-                    InputFields.password(n.isPassword, n.inputType)
+                    checks && InputFields.password(n.isPassword, n.inputType)
                 if (password && visible) sensitive = true
                 val r = android.graphics.Rect()
                 n.getBoundsInScreen(r)
@@ -321,7 +341,7 @@ class PhoneService : AccessibilityService() {
                 throw SafeFailure("capture_uncertain")
             val signature =
                 digest(
-                    "$app|${selected.first.id}|$displayId|$width|$height|$rotation|${selected.first.isFocused}|$rects|$nodes|$capture|$windowBounds|$captureReady"
+                    "$app|${selected.first.id}|$displayId|$width|$height|$rotation|${selected.first.isFocused}|$rects|$nodes|$capture|$windowBounds|$captureReady|$checks"
                 )
             if (signature != lastSignature) {
                 revision++
@@ -353,7 +373,7 @@ class PhoneService : AccessibilityService() {
                     partial = partial,
                     displayId = displayId,
                     windowBounds = Rect(windowBounds.left, windowBounds.top, windowBounds.right, windowBounds.bottom),
-                    captureReady = captureReady,
+                    captureReady = !checks || captureReady,
                 )
                 .also { lastScreen = it }
         } finally {
@@ -417,7 +437,9 @@ class PhoneService : AccessibilityService() {
                     if (node != null) node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
                     else gesture(action.x, action.y, action.x, action.y, 650)
                 Op.TEXT -> {
-                    if (node?.isPassword != false) throw SafeFailure("manual_secret")
+                    if (node == null) throw SafeFailure("invalid_target")
+                    if (runtime.settings.value.policy.checkSensitiveContent && InputFields.password(node.isPassword, node.inputType))
+                        throw SafeFailure("manual_secret")
                     node.performAction(
                         AccessibilityNodeInfo.ACTION_SET_TEXT,
                         Bundle().apply {

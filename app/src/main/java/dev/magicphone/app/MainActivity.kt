@@ -95,6 +95,7 @@ class MainActivity : ComponentActivity() {
         field("modelConfigured", provider?.model?.isNotBlank() == true)
         field("chatgptAccountSelected", settings.accounts.any { it.client == settings.activeAccount })
         field("allowAllApps", settings.policy.allowAllApps)
+        field("sensitiveContentChecks", settings.policy.checkSensitiveContent)
         field("readableAppCount", settings.policy.apps.values.count { it.observe && !it.deny })
         field("mutableAppCount", settings.policy.apps.values.count { it.mutate && !it.deny })
         field("conversationCount", runtime.archive.value.conversations.size)
@@ -274,6 +275,10 @@ fun errorResource(code: String): Int =
                 "plan_consent_required",
             ) -> R.string.error_limit
         code == "action_uncertain" -> R.string.error_uncertain
+        code == "invalid_model_action" -> R.string.error_model_action
+        code == "verification_required" -> R.string.error_verification
+        code in setOf("invalid_action", "invalid_target", "invalid_coordinates") -> R.string.error_action_target
+        code in setOf("run_budget", "repeated_failure") -> R.string.error_run_budget
         code in setOf("provider_required", "api_key_required", "models_failed") ->
             R.string.error_provider
         code == "revocation_unconfirmed" -> R.string.error_revoke

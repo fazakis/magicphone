@@ -57,7 +57,7 @@ class Policy(private val ownPackage: String) {
         if (action.op != Op.OPEN) {
             if (screen.mixed || !screen.focused || screen.app != action.app)
                 return Decision.Deny("screen_uncertain")
-            if (screen.sensitive) return Decision.Deny("manual_secret")
+            if (config.checkSensitiveContent && screen.sensitive) return Decision.Deny("manual_secret")
             // Global navigation and coordinate dispatch are still scoped to the default display.
             // A read may use the selected window on another display without authorizing actions there.
             if (screen.displayId != 0 && action.op.mutates) return Decision.Deny("screen_uncertain")
@@ -68,7 +68,7 @@ class Policy(private val ownPackage: String) {
                 val node =
                     screen.nodes.find { it.ref == action.node }
                         ?: return Decision.Deny("stale_target")
-                if (node.sensitive) return Decision.Deny("manual_secret")
+                if (config.checkSensitiveContent && node.sensitive) return Decision.Deny("manual_secret")
                 if (action.op.mutates && !node.enabled) return Decision.Deny("invalid_target")
                 if (action.op == Op.TEXT && !node.editable) return Decision.Deny("invalid_target")
                 if (action.op == Op.SCROLL && !node.scrollable)
@@ -126,6 +126,9 @@ class Policy(private val ownPackage: String) {
 data class Approval(val id: String, val action: Action, val binding: String, val expiresAt: Long)
 
 interface DevicePort {
+    /** Hide only our transient progress surface across inspection, validation and dispatch. */
+    suspend fun <T> withUnobstructedScreen(block: suspend () -> T): T = block()
+
     // Package metadata only; never read another app's screen before policy preflight.
     suspend fun foregroundPackage(): String = ""
 
@@ -203,6 +206,11 @@ class Gateway(
 
     suspend fun run(action: Action): ToolResult = mutex.withLock {
         val run = generation
+        if (action.isDevice) device.withUnobstructedScreen { runLocked(action, run) }
+        else runLocked(action, run)
+    }
+
+    private suspend fun runLocked(action: Action, run: Long): ToolResult {
         fun live() {
             if (stopped || run != generation) throw CancellationException("stopped")
         }
@@ -268,7 +276,7 @@ class Gateway(
         live()
         event(action, result.status)
         budget.result(result.status !in setOf("failed", "uncertain"))
-        result
+        return result
     }
 
     suspend fun batch(actions: List<Action>): List<ToolResult> {

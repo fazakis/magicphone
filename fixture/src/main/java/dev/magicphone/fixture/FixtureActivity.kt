@@ -66,6 +66,17 @@ class FixtureActivity : Activity() {
         if (intent.getBooleanExtra("largeTree", false)) {
             repeat(120) { index -> layout.addView(TextView(this).apply { text = "Ordinary row $index" }) }
         }
-        setContentView(layout)
+        if (intent.getBooleanExtra("bottomControl", false)) {
+            fun dp(n: Int) = (resources.displayMetrics.density * n).toInt()
+            val frame = FrameLayout(this)
+            frame.addView(layout, FrameLayout.LayoutParams(-1, -1))
+            frame.addView(Button(this).apply {
+                text = "Covered action"; isAllCaps = false
+                setOnClickListener { count++; result.text = "Counter: $count" }
+            }, FrameLayout.LayoutParams(dp(220), dp(64), android.view.Gravity.BOTTOM or android.view.Gravity.END).apply {
+                rightMargin = dp(16); bottomMargin = dp(100)
+            })
+            setContentView(frame)
+        } else setContentView(layout)
     }
 }

@@ -80,6 +80,11 @@ class AppRuntime(val app: Application) {
     private val auth = ChatGptAuth()
     private val port =
         object : DevicePort {
+            override suspend fun <T> withUnobstructedScreen(block: suspend () -> T): T {
+                val service = withContext(Dispatchers.Main.immediate) { phone }
+                return if (service == null) block() else service.withProgressHidden(block)
+            }
+
             override suspend fun foregroundPackage() = withContext(Dispatchers.Main.immediate) {
                 var foreground = phone?.foregroundPackage().orEmpty()
                 repeat(10) {
@@ -300,6 +305,11 @@ class AppRuntime(val app: Application) {
         vault.write("settings", JsonCodec.encodeToString(Settings.serializer(), normalized))
         settings.value = normalized
         if (!normalized.showTaskResultBubbles) resultRequest.value = null
+    }
+
+    fun setSensitiveContentChecks(enabled: Boolean) {
+        stop()
+        saveSettings(settings.value.copy(policy = settings.value.policy.copy(checkSensitiveContent = enabled)))
     }
 
     fun setAllowAllApps(enabled: Boolean) {

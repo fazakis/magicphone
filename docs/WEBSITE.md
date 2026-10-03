@@ -66,3 +66,7 @@ Homepage version and download links target v0.2.4. Local links and the release U
 ## 0.2.5 download update (2026-10-03)
 
 Homepage version and download links target v0.2.5 with popup dictation, fresh screen context and progress controls. Publication verification checks the deployed page and release URL.
+
+## 0.2.6 download update (2026-10-03)
+
+Homepage version and download links target v0.2.6 with popup action continuity and configurable sensitive-content checks.

@@ -35,7 +35,7 @@
     <string name="all_apps_title">Automatic app access</string>
     <string name="all_apps_enable">Allow all apps without asking</string>
     <string name="all_apps_disable">Turn off automatic access</string>
-    <string name="all_apps_help">Open apps, tap, scroll and enter ordinary text without selecting apps or approving each action. Explicitly blocked apps stay blocked. Android permissions and detected secret fields stay manual. Access stays on until you turn it off.</string>
+    <string name="all_apps_help">Open apps, tap, scroll and enter ordinary text without selecting apps or approving each action. Explicitly blocked apps stay blocked. Android permission decisions stay manual. Detected password fields are blocked while sensitive-content checks are on. Access stays on until you turn it off.</string>
     <string name="all_apps_rule_help">Read and Act are allowed automatically unless blocked. Your individual choices return when automatic access is off.</string>
     <string name="observe">Read</string>
     <string name="mutate">Act</string>
@@ -217,4 +217,10 @@
     <string name="working_opening">Opening the app…</string>
     <string name="working_acting">Working in the app…</string>
     <string name="working_answering">Preparing your answer…</string>
+    <string name="sensitive_checks">Check sensitive content</string>
+    <string name="sensitive_checks_help">On: block detected password fields and sensitive screens. Off: allow reading and actions there; visible sensitive information may be sent to your selected model. App permissions, screen lock and Android screenshot protection still apply.</string>
+    <string name="error_verification">An action was sent, but its result could not be verified from the current screen. The action was not repeated.</string>
+    <string name="error_action_target">The requested control or action could not be matched to the current screen.</string>
+    <string name="error_run_budget">The task reached its action or recovery limit. Check the latest observed result before continuing.</string>
+    <string name="error_model_action">The model repeatedly returned an invalid action request. No action from those responses was executed.</string>
 </resources>

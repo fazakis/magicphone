@@ -23,12 +23,32 @@ class WorkingBubble(private val service: PhoneService) {
     private var lastUpdate = 0L
     private var desired = ""
     private var conversation: String? = null
+    private var hiddenForTools = 0
+    private var restoreAfter = 0L
+    private var restore: Job? = null
+    fun suspendForTool(): Int? {
+        hiddenForTools++
+        restore?.cancel(); restore = null
+        val node = view?.takeIf { it.isAttachedToWindow }?.createAccessibilityNodeInfo()
+        val window = node?.windowId
+        @Suppress("DEPRECATION") node?.recycle()
+        hide()
+        return window
+    }
+    fun resumeAfterTool() {
+        hiddenForTools = (hiddenForTools - 1).coerceAtLeast(0)
+        if (hiddenForTools != 0) return
+        // Debounce showing, never delay the agent or a following tool operation.
+        restoreAfter = SystemClock.elapsedRealtime() + 200
+        restore?.cancel()
+        restore = r.scope.launch { delay(200); restore = null; update() }
+    }
     private val r get() = service.runtime
     private val manager get() = service.getSystemService(WindowManager::class.java)
     private fun dp(value: Int) = (service.resources.displayMetrics.density * value).toInt()
     private fun eligible(): Boolean {
         val chat = r.popupConversation.value ?: return false
-        return chat == r.current.value && r.visibleChat.value != chat && !service.hasPromptOrReply &&
+        return hiddenForTools == 0 && SystemClock.elapsedRealtime() >= restoreAfter && chat == r.current.value && r.visibleChat.value != chat && !service.hasPromptOrReply &&
             r.agent.screenCapture.value in setOf(ScreenCaptureState.CAPTURED, ScreenCaptureState.UNAVAILABLE) &&
             r.agent.state.value in setOf(RunState.PLANNING, RunState.ACTING, RunState.PAUSED, RunState.WAITING_APPROVAL) &&
             service.getSystemService(PowerManager::class.java).isInteractive &&

@@ -194,6 +194,7 @@ data class PolicyConfig(
     val grants: List<Grant> = emptyList(),
     val mcp: Map<String, Set<String>> = emptyMap(),
     val allowAllApps: Boolean = false,
+    val checkSensitiveContent: Boolean = true,
 )
 
 @Serializable

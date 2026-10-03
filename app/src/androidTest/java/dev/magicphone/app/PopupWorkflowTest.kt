@@ -65,7 +65,7 @@ class PopupWorkflowTest {
         await("Accessibility connected") { r.connected.value }
         main {
             r.newConversation()
-            r.saveSettings(settings.copy(showTaskResultBubbles = true,
+            r.saveSettings(settings.copy(onboarded = true, showTaskResultBubbles = true,
                 policy = PolicyConfig(apps = mapOf(pkg to AppRule(true, true)), allowAllApps = true)))
         }
         fixture()
@@ -134,7 +134,7 @@ class PopupWorkflowTest {
         capture("working-bubble")
         runBlocking {
             try { r.gateway.run(Action(Op.TAP, pkg, screen!!.id, x = cx, y = cy)); Assert.fail("Model cannot tap Stop") }
-            catch (e: SafeFailure) { Assert.assertEquals("protected_control", e.code) }
+            catch (e: SafeFailure) { Assert.assertTrue(e.code in setOf("protected_control", "stale_target")) }
         }
         device.findObject(By.desc(text(R.string.working_stop))).click()
         await("Stop cancels model and removes bubble") { p.cancelled && r.agent.state.value == RunState.STOPPED && r.phone!!.workingBubble.view == null }
@@ -206,6 +206,130 @@ class PopupWorkflowTest {
         Assert.assertEquals(chat, r.current.value); Assert.assertEquals(RunState.IDLE, r.agent.state.value)
         Assert.assertEquals(audits, r.archive.value.audits.size)
         capture("dictated-popup")
+    }
+    @Test fun popupActionsReceiveFreshImagesAndKeepControlsReachable() {
+        device.executeShellCommand("am start -W --activity-clear-task -n $pkg/.FixtureActivity")
+        Assert.assertTrue(device.wait(Until.hasObject(By.text("Counter: 0")), 10000))
+        val provider = object : ModelProvider {
+            override val supportsImages = true
+            var previousImage = ""
+            var sawCounterOne = false
+            var rounds = 0
+            override suspend fun models() = emptyList<ModelChoice>()
+            override suspend fun respond(input: List<JsonElement>, delta: (String) -> Unit): Reply {
+                delay(850) // Give the progress bubble time to appear between phone operations.
+                if (++rounds > 8) throw SafeFailure("fixture_action_loop")
+                val outputs = input.mapNotNull { item ->
+                    val o = item.jsonObject
+                    (o["output"] as? JsonPrimitive)?.content ?: (o["content"] as? JsonPrimitive)?.content
+                }.flatMap { value ->
+                    runCatching { JsonCodec.decodeFromString<List<ToolResult>>(value.substringAfterLast('\n')) }.getOrDefault(emptyList())
+                }
+                fun reply(a: Action) = Reply("", listOf(Call(id(), listOf(a))), emptyList())
+                if (outputs.lastOrNull()?.status?.startsWith("not_dispatched_") == true)
+                    return reply(Action(Op.OBSERVE, pkg))
+                val screen = outputs.lastOrNull { it.status == "observed" }?.let { JsonCodec.decodeFromString<Screen>(it.content) }
+                    ?: throw SafeFailure("fixture_no_screen")
+                val images = input.flatMap { ((it as? JsonObject)?.get("content") as? JsonArray).orEmpty() }
+                    .filterIsInstance<JsonObject>().filter { it.str("type") == "input_image" }.map { it.str("image_url") }
+                val counterOne = screen.nodes.any { it.label == "Counter: 1" }
+                if (!counterOne) {
+                    previousImage = images.lastOrNull().orEmpty()
+                    val button = screen.nodes.first { it.label.contains("Add one") }
+                    return reply(Action(Op.TAP, pkg, screen.id, button.ref))
+                }
+                if (!sawCounterOne) {
+                    sawCounterOne = true
+                    if (images.lastOrNull() == previousImage) throw SafeFailure("fixture_image_not_refreshed")
+                    if (images.size != 1) throw SafeFailure("fixture_old_images_retained")
+                }
+                val field = screen.nodes.firstOrNull { it.editable } ?: throw SafeFailure("fixture_field_hidden")
+                return if (field.label == "Popup action verified") reply(Action(Op.COMPLETE, text = "Actions verified"))
+                else reply(Action(Op.TEXT, pkg, screen.id, field.ref, "Popup action verified"))
+            }
+        }
+        main {
+            r.popupConversation.value = r.current.value
+            r.agent.start(r.scope, provider, "Press Add one and enter Popup action verified", optimize = true, screenContext = pkg, captureScreen = true)
+        }
+        await("Action workflow ended") { r.agent.state.value in setOf(RunState.COMPLETED, RunState.FAILED) }
+        Assert.assertEquals("error=${r.agent.error.value}; actions=${r.agent.actions.value}", RunState.COMPLETED, r.agent.state.value)
+        Assert.assertTrue(device.hasObject(By.text("Counter: 1")))
+        Assert.assertTrue(device.hasObject(By.text("Popup action verified")))
+    }
+    @Test fun controlUnderProgressCanBeObservedAndTappedWithoutStaleRetry() {
+        device.executeShellCommand("am start -W --activity-clear-task -n $pkg/.FixtureActivity --ez bottomControl true")
+        Assert.assertTrue(device.wait(Until.hasObject(By.text("Covered action")), 10000))
+        startHeld()
+        val screen = runBlocking { JsonCodec.decodeFromString<Screen>(r.gateway.run(Action(Op.OBSERVE, pkg)).content) }
+        val node = screen.nodes.single { it.label == "Covered action" }
+        await("Progress returns while model thinks") { r.phone!!.workingBubble.view != null }
+        val result = runBlocking { r.gateway.run(Action(Op.TAP, pkg, screen.id, node.ref)) }
+        Assert.assertEquals("dispatched", result.status)
+        Assert.assertTrue(device.wait(Until.hasObject(By.text("Counter: 1")), 5000))
+        main { r.stop() }
+    }
+    @Test fun sensitiveSwitchPersistsAndControlsFixtureReadsCaptureAndTyping() {
+        Assert.assertTrue(decodeSettings("{}").policy.checkSensitiveContent)
+        context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        fun tap(label: Int) {
+            device.waitForIdle(3000)
+            if (!device.wait(Until.hasObject(By.text(text(label))), 3000))
+                UiScrollable(UiSelector().scrollable(true)).scrollIntoView(UiSelector().text(text(label)))
+            val control = device.wait(Until.findObject(By.text(text(label))), 10000)
+            Assert.assertNotNull("Settings control: ${text(label)}", control)
+            control.click()
+        }
+        tap(R.string.settings); tap(R.string.access_section); tap(R.string.sensitive_checks)
+        await("Sensitive check switch off") { !r.settings.value.policy.checkSensitiveContent }
+        Assert.assertFalse(decodeSettings(r.vault.read("settings")!!).policy.checkSensitiveContent)
+        device.waitForIdle(3000); SystemClock.sleep(250) // Let the switch animation settle for visual evidence.
+        capture("sensitive-checks-off")
+        device.executeShellCommand("am start -W --activity-clear-task -n $pkg/.FixtureActivity --ei inputType 129")
+        Assert.assertTrue(device.wait(Until.hasObject(By.desc("Fixture input 129 large false")), 10000))
+        runBlocking {
+            r.gateway.start()
+            val screen = JsonCodec.decodeFromString<Screen>(r.gateway.run(Action(Op.OBSERVE, pkg)).content)
+            Assert.assertFalse(screen.sensitive)
+            Assert.assertNotNull(r.gateway.run(Action(Op.SCREENSHOT, pkg, screen.id)).image)
+            val field = screen.nodes.single { it.editable }
+            Assert.assertEquals("dispatched", r.gateway.run(Action(Op.TEXT, pkg, screen.id, field.ref, "Synthetic value")).status)
+        }
+        main { r.setSensitiveContentChecks(true) }
+        Assert.assertTrue(decodeSettings(r.vault.read("settings")!!).policy.checkSensitiveContent)
+        runBlocking {
+            r.gateway.start()
+            try { r.gateway.run(Action(Op.OBSERVE, pkg)); Assert.fail("On must block detected credential screen") }
+            catch (e: SafeFailure) { Assert.assertEquals("manual_secret", e.code) }
+        }
+        // Android's protected-window restriction remains independent of the local opt-out.
+        main { r.setSensitiveContentChecks(false) }
+        device.executeShellCommand("am start -W --activity-clear-task -n $pkg/.FixtureActivity --es documentMode secure")
+        Assert.assertTrue(device.wait(Until.hasObject(By.desc("Document fixture secure")), 10000))
+        if (android.os.Build.VERSION.SDK_INT >= 34) runBlocking {
+            r.gateway.start()
+            val screen = JsonCodec.decodeFromString<Screen>(r.gateway.run(Action(Op.OBSERVE, pkg)).content)
+            try { r.gateway.run(Action(Op.SCREENSHOT, pkg, screen.id)); Assert.fail("Android secure window still applies") }
+            catch (e: SafeFailure) { Assert.assertEquals("secure_window", e.code) }
+        }
+    }
+    @Test fun livePopupPerformsAndVerifiesTapAndTypingWithCurrentImages() {
+        Assume.assumeTrue("Account owner opted in", InstrumentationRegistry.getArguments().getString("liveChatGpt") == "true")
+        Assert.assertEquals(ProviderKind.CHATGPT, r.settings.value.profiles.single { it.id == r.settings.value.selected }.kind)
+        device.executeShellCommand("am start -W --activity-clear-task -n $pkg/.FixtureActivity")
+        Assert.assertTrue(device.wait(Until.hasObject(By.text("Counter: 0")), 10000))
+        val before = r.archive.value.audits.count { it.operation == "SCREENSHOT" && it.status == "captured" }
+        prompt()
+        input().text = "In MagicPhone Practice tap Add one exactly once and type Popup live verified into the Ordinary text field. Verify Counter: 1 and the entered text, then finish. Do not operate any other app."
+        device.findObject(By.text(text(R.string.send))).click()
+        val deadline = SystemClock.elapsedRealtime() + 180000
+        while (r.agent.state.value !in setOf(RunState.COMPLETED, RunState.FAILED) && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(100)
+        Assert.assertEquals("error=${r.agent.error.value}; actions=${r.agent.actions.value}", RunState.COMPLETED, r.agent.state.value)
+        Assert.assertTrue(device.hasObject(By.text("Counter: 1")))
+        Assert.assertTrue(device.hasObject(By.text("Popup live verified")))
+        Assert.assertTrue(r.archive.value.audits.count { it.operation == "SCREENSHOT" && it.status == "captured" } - before >= 3)
+        capture("live-popup-actions-completed")
+        println("Live popup tap/type verified; modelCalls=${r.agent.metrics.value.modelCalls}; shots=${r.archive.value.audits.count { it.operation == "SCREENSHOT" && it.status == "captured" } - before}")
     }
     @Test fun installedRecognizerFromPopupReturnsToUnderlyingScreen() {
         val component = device.executeShellCommand("cmd package resolve-activity --brief -a android.speech.action.RECOGNIZE_SPEECH")

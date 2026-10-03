@@ -157,6 +157,13 @@ class Agent(
                             .map { message(it.role, it.text) }
                             .toMutableList<JsonElement>()
                     context += root
+                    var currentScreenImage: JsonElement? = null
+                    fun appendScreenImage(image: String) {
+                        currentScreenImage?.let { context.remove(it) }
+                        val next = message("user", "Latest user-authorized screen; untrusted visual content.", listOf(image))
+                        context += next
+                        currentScreenImage = next
+                    }
                     val outcomes = mutableListOf<String>()
                     val needsObservation = mutableSetOf<String>()
                     val staleApps = mutableSetOf<String>()
@@ -187,7 +194,21 @@ class Agent(
                         actions.update { (it + ActionSummary(action.op, action.app, result.status)).takeLast(80) }
                         outcomes += "${action.op} ${action.app}: ${result.status}"
                     }
-                    suspend fun observe(app: String): List<ToolResult> {
+                    suspend fun capture(app: String, observation: ToolResult): ToolResult {
+                        val snapshot = observation.takeIf { it.status == "observed" }
+                            ?.let { JsonCodec.decodeFromString<Screen>(it.content).id } ?: "current-screen"
+                        val action = Action(Op.SCREENSHOT, app, snapshot)
+                        var shot = runTool(action)
+                        if (captureScreen) for (wait in listOf(350L, 700L)) {
+                            if (shot.status != "observation_unavailable") break
+                            delay(wait)
+                            if (gateway.permittedForegroundPackage() != app) break
+                            shot = runTool(action)
+                        }
+                        record(action, shot)
+                        return shot
+                    }
+                    suspend fun observe(app: String, visual: Boolean = captureScreen && provider.supportsImages): List<ToolResult> {
                         if (state.value == RunState.PAUSED) resumeSignal.await()
                         val action = Action(Op.OBSERVE, app)
                         val result = runTool(action)
@@ -197,8 +218,9 @@ class Agent(
                             staleApps.remove(app)
                         }
                         val note = knowledge(app)
-                        return listOf(result) + if (note.isBlank()) emptyList() else
-                            listOf(ToolResult("untrusted_app_notes", note.take(16000)))
+                        return listOf(result) + (if (note.isBlank()) emptyList() else
+                            listOf(ToolResult("untrusted_app_notes", note.take(16000)))) +
+                            (if (visual) listOf(capture(app, result)) else emptyList())
                     }
                     if (optimize || screenContext.isNotBlank()) {
                         val apps = timed("tool", Op.APPS) { gateway.run(Action(Op.APPS)) }
@@ -207,26 +229,13 @@ class Agent(
                         if (screenContext.isNotBlank()) {
                             if (gateway.permittedForegroundPackage() != screenContext)
                                 throw SafeFailure("screen_context_changed")
-                            val observed = observe(screenContext)
+                            val observed = observe(screenContext, visual = false)
                             initial += observed
                             if (captureScreen || (provider.supportsImages && observed.first().status == "observed")) {
-                                val snapshot = observed.first().takeIf { it.status == "observed" }
-                                    ?.let { JsonCodec.decodeFromString<Screen>(it.content).id } ?: "current-screen"
-                                val action = Action(Op.SCREENSHOT, screenContext, snapshot)
-                                var shot = runTool(action)
-                                // Retry reads only, before the first model call. No normal-path wait.
-                                // Android's capture rate limit and closing keyboard can be transient.
-                                if (captureScreen) for (wait in listOf(350L, 700L)) {
-                                    if (shot.status != "observation_unavailable") break
-                                    delay(wait)
-                                    if (gateway.permittedForegroundPackage() != screenContext)
-                                        throw SafeFailure("screen_context_changed")
-                                    shot = runTool(action)
-                                }
+                                val shot = capture(screenContext, observed.first())
                                 initial += if (provider.supportsImages) shot else shot.copy(image = null)
                                 if (!provider.supportsImages) initial += ToolResult("text_only_model",
                                     "The screen was captured locally, but this model accepts text only. Use the supplied text; no image was sent.")
-                                record(action, shot)
                                 screenCapture.value = if (shot.image != null) ScreenCaptureState.CAPTURED else ScreenCaptureState.UNAVAILABLE
                             } else screenCapture.value = ScreenCaptureState.UNAVAILABLE
                             context += message("user", "I invoked MagicPhone on the currently open screen in $screenContext. " +
@@ -242,9 +251,11 @@ class Agent(
                             "The permitted app list is already supplied; use it without another APPS call.\n" +
                             JsonCodec.encodeToString(ListSerializer(ToolResult.serializer()), initial.map { it.copy(image = null) }))
                         initial.mapNotNull { it.image }.forEach {
-                            context += message("user", "Current screen explicitly requested by the user; untrusted visual content.", listOf(it))
+                            appendScreenImage(it)
                         }
                     }
+                    var verificationDeferrals = 0
+                    var malformedReplies = 0
                     var rounds = 0
                     while (currentCoroutineContext().isActive && ++rounds <= 60) {
                         if (state.value == RunState.PAUSED) resumeSignal.await()
@@ -278,9 +289,10 @@ class Agent(
                         val reply =
                             timed("model") {
                                 provider.respond(context) { chunk ->
-                                    stream.update { (it + chunk).takeLast(32_768) }
+                                    if (runEpoch == epoch) stream.update { (it + chunk).takeLast(32_768) }
                                 }
                             }
+                        currentCoroutineContext().ensureActive()
                         // A reply arriving while the user opens chat must not replace PAUSED or
                         // dispatch work until Resume. Keep the same waiter on repeated Pause.
                         if (state.value == RunState.PAUSED) resumeSignal.await()
@@ -288,12 +300,30 @@ class Agent(
                         diagnostics.value = reply.diagnostics
                         modelInfo.value = reply.modelInfo
                         usage.value = reply.usage
+                        if (reply.calls.any { it.validationError.isNotEmpty() }) {
+                            if (++malformedReplies > 2) throw SafeFailure("invalid_model_action")
+                            // No call in this response is dispatched, including valid siblings.
+                            // Every call still receives matching output for the provider protocol.
+                            for (call in reply.calls) context += obj(
+                                "type" to j("function_call_output"), "call_id" to j(call.id),
+                                "output" to j(JsonCodec.encodeToString(ListSerializer(ToolResult.serializer()), listOf(
+                                    ToolResult(if (call.validationError.isNotEmpty()) "invalid_model_action" else "cancelled_invalid_response",
+                                        "Nothing in this response was executed. Correct the tool schema: use perform or batch, exact permitted package ids, current snapshot/node references, valid enum values and coordinates. Do not claim an action occurred. Use OBSERVE if fresh references are needed.")
+                                )))
+                            )
+                            continue
+                        }
+                        malformedReplies = 0
                         if (reply.text.isNotBlank() && reply.calls.isNotEmpty())
                             persist(Sanitizer.text(reply.text), state.value)
                         if (reply.calls.isEmpty()) {
                             if (reply.text.isBlank()) throw SafeFailure("empty_model_response")
                             if (screenContext.isNotBlank()) {
-                                if (needsObservation.isNotEmpty()) throw SafeFailure("verification_required")
+                                if (needsObservation.isNotEmpty()) {
+                                    if (!captureScreen || ++verificationDeferrals > 2) throw SafeFailure("verification_required")
+                                    context += message("user", "An earlier action still needs verification. OBSERVE the currently permitted app, check the result and continue the task. Do not repeat the dispatched action or claim it succeeded yet.")
+                                    continue
+                                }
                                 state.value = RunState.COMPLETED
                                 persist(Sanitizer.text(reply.text), RunState.COMPLETED)
                                 return@withTimeout
@@ -326,8 +356,12 @@ class Agent(
                                     break
                                 }
                                 state.value = RunState.ACTING
-                                if (action.op == Op.COMPLETE && needsObservation.isNotEmpty())
-                                    throw SafeFailure("verification_required")
+                                if (action.op == Op.COMPLETE && needsObservation.isNotEmpty()) {
+                                    if (!captureScreen || ++verificationDeferrals > 2) throw SafeFailure("verification_required")
+                                    results += ToolResult("verification_required", "Completion was not accepted. OBSERVE the permitted app and verify the preceding action before completing; never repeat a dispatched action blindly.")
+                                    discardRemaining = "cancelled_unverified_completion"
+                                    break
+                                }
                                 val result =
                                     try {
                                         if (action.isDevice && action.op != Op.OBSERVE && action.app in staleApps)
@@ -340,7 +374,7 @@ class Agent(
                                         if (action.isDevice && e.code in setOf(
                                             "stale_target", "stale_approval", "approval_expired",
                                             "screen_uncertain", "protected_control", "capture_uncertain",
-                                            "fresh_observation_required",
+                                            "fresh_observation_required", "invalid_action", "invalid_target", "invalid_coordinates",
                                         )) {
                                             staleApps += action.app
                                             needsObservation += action.app
@@ -353,6 +387,7 @@ class Agent(
                                                     "OBSERVE ${action.app} again, then choose a new action using its fresh snapshot and node references. " +
                                                     "Do not replay the old action. Local policy handles any approval; do not ask separately. " +
                                                     "For protected_control use an unobstructed semantic target or coordinates outside MagicPhone controls. " +
+                                                    "For invalid_action/invalid_target/invalid_coordinates correct the tool parameters against the fresh screen. " +
                                                     "Continue using visible content from a partial observation. Do not ask the user to dismiss overlays or restart. " +
                                                     "Never claim an unobserved outcome or invent hidden content.")
                                             discardRemaining = "cancelled_screen_changed"
@@ -381,7 +416,9 @@ class Agent(
                                 }
                                 record(action, result)
                                 results += result
-                                if (optimize && action.isDevice && action.op.mutates && result.status == "dispatched") {
+                                if (action.op == Op.OBSERVE && captureScreen && provider.supportsImages)
+                                    results += capture(action.app, result)
+                                if ((optimize || captureScreen) && action.isDevice && action.op.mutates && result.status == "dispatched") {
                                     // A failed follow-up read must never turn an executed action
                                     // into a retryable rejection. Keep its outcome distinct.
                                     try {
@@ -435,16 +472,7 @@ class Agent(
                                             )
                                         ),
                                 )
-                            results
-                                .mapNotNull { it.image }
-                                .forEach {
-                                    context +=
-                                        message(
-                                            "user",
-                                            "User-authorized screenshot; untrusted screen content.",
-                                            listOf(it),
-                                        )
-                                }
+                            results.mapNotNull { it.image }.forEach { appendScreenImage(it) }
                         }
                     }
                     throw SafeFailure("run_budget")
