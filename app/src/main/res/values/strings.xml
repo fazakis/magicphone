@@ -224,4 +224,11 @@
     <string name="error_run_budget">The task reached its action or recovery limit. Check the latest observed result before continuing.</string>
     <string name="error_model_action">The model repeatedly returned an invalid action request. No action from those responses was executed.</string>
     <string name="error_window_not_focused">Tap the visible app window to focus it before continuing.</string>
+    <string name="retained_photo">Saved photo · tap to view</string>
+    <string name="attachment_loading">Loading saved photo…</string>
+    <string name="attachment_unavailable">Photo unavailable on this device. Attach it again if needed.</string>
+    <string name="attachment_limit">Photo storage is full. Delete unused conversations before attaching more photos.</string>
+    <string name="attachment_model_unsupported">This model cannot read photos. Choose an image-capable model; your draft has been kept.</string>
+    <string name="attachment_save_failed">Your reply could not be saved or delivered. Your draft has been kept. Please try again.</string>
+    <string name="attachment_privacy">Uploaded photos are encrypted on this device and kept with their conversations. Deleting a conversation removes photos no other conversation uses. Automatic screen captures remain temporary. Encrypted backups currently include text and photo references, but not photo files.</string>
 </resources>

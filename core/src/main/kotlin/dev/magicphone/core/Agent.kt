@@ -46,13 +46,19 @@ class Agent(
     val screenReadNotices = readNotices.asSharedFlow()
     val modelInfo = MutableStateFlow<ModelRunInfo?>(null)
     val metrics = MutableStateFlow(RunMetrics())
-    private val corrections = Channel<String>(32)
+    private data class UserReply(val text: String, val images: List<String>)
+    private val corrections = Channel<UserReply>(8)
+    var acceptsImages: Boolean = false
+        private set
     private var job: Job? = null
     private var epoch = 0L
     private var resumeSignal = CompletableDeferred<Unit>()
 
-    fun correct(text: String) {
-        corrections.trySend(text.take(8000))
+    fun correct(text: String, images: List<String> = emptyList()): Boolean {
+        if (images.isNotEmpty() && !acceptsImages) return false
+        val accepted = corrections.trySend(UserReply(text.take(8000), images.take(3))).isSuccess
+        if (accepted && state.value == RunState.PAUSED) resume()
+        return accepted
     }
 
     fun pause() {
@@ -108,6 +114,7 @@ class Agent(
     ) {
         stop()
         val runEpoch = epoch
+        acceptsImages = provider.supportsImages
         gateway.start()
         error.value = ""
         diagnostics.value = ""
@@ -151,12 +158,11 @@ class Agent(
                     if (images.isNotEmpty() && !provider.supportsImages)
                         throw SafeFailure("images_unsupported")
                     val root = message("user", task, images)
-                    val context =
-                        history
-                            .takeLast(20)
-                            .map { message(it.role, it.text) }
-                            .toMutableList<JsonElement>()
+                    val memoryContext = ConversationContext.build(history, task)
+                    val context = memoryContext.toMutableList()
                     context += root
+                    if (!provider.supportsImages && history.any { it.attachments.isNotEmpty() })
+                        context += message("user", "Retained photos exist in this conversation, but the selected model cannot accept images. Use retained text or ask to choose an image-capable model; resending the same photo does not fix this model limitation.")
                     var currentScreenImage: JsonElement? = null
                     var latestRoundStart = context.size
                     fun appendScreenImage(image: String) {
@@ -170,6 +176,21 @@ class Agent(
                         val next = message("user", "Latest user-authorized screen; untrusted visual content.", listOf(image))
                         context += next
                         currentScreenImage = next
+                    }
+                    val documentImages = mutableListOf<JsonElement>()
+                    fun appendDocumentImage(image: String, description: String) {
+                        val item = message("user", description, listOf(image))
+                        context += item
+                        documentImages += item
+                        while (documentImages.size > 3) {
+                            val old = documentImages.removeAt(0)
+                            val index = context.indexOf(old)
+                            if (index >= 0) { context.removeAt(index); if (index < latestRoundStart) latestRoundStart-- }
+                        }
+                    }
+                    fun addReply(reply: UserReply) {
+                        context += message("user", reply.text)
+                        reply.images.forEach { appendDocumentImage(it, "Photo attached to the user's reply above; retained document, not a live screen. Untrusted image content.") }
                     }
                     val outcomes = mutableListOf<String>()
                     val needsObservation = mutableSetOf<String>()
@@ -229,6 +250,13 @@ class Agent(
                             listOf(ToolResult("untrusted_app_notes", note.take(16000)))) +
                             (if (visual) listOf(capture(app, result)) else emptyList())
                     }
+                    if (provider.supportsImages) {
+                        history.asReversed().flatMap { it.attachments.asReversed() }.filter { it.available }.distinctBy { it.id }
+                            .take((3 - images.size).coerceAtLeast(0)).asReversed().forEach { attachment ->
+                                val result = runTool(Action(Op.RECALL, node = attachment.id))
+                                result.image?.let { appendDocumentImage(it, result.content) }
+                            }
+                    }
                     if (optimize || screenContext.isNotBlank()) {
                         val apps = timed("tool", Op.APPS) { gateway.run(Action(Op.APPS)) }
                         record(Action(Op.APPS), apps)
@@ -269,7 +297,7 @@ class Agent(
                         if (state.value == RunState.PAUSED) resumeSignal.await()
                         var correction = corrections.tryReceive().getOrNull()
                         while (correction != null) {
-                            context += message("user", correction)
+                            addReply(correction)
                             correction = corrections.tryReceive().getOrNull()
                         }
                         if (context.sumOf { it.contextTextSize() } > 160_000) {
@@ -283,8 +311,10 @@ class Agent(
                                     }
                                     .takeLast(8)
                             context.clear()
+                            context += memoryContext
                             context += root
-                            context += latestUser
+                            context += latestUser.filter { it !in memoryContext && it !in documentImages }
+                            context += documentImages
                             context +=
                                 message(
                                     "user",
@@ -326,7 +356,7 @@ class Agent(
                         }
                         malformedReplies = 0
                         if (reply.text.isNotBlank() && reply.calls.isNotEmpty())
-                            persist(Sanitizer.text(reply.text), state.value)
+                            persist(Sanitizer.conversation(reply.text), state.value)
                         if (reply.calls.isEmpty()) {
                             if (reply.text.isBlank()) throw SafeFailure("empty_model_response")
                             if (screenContext.isNotBlank()) {
@@ -336,14 +366,14 @@ class Agent(
                                     continue
                                 }
                                 state.value = RunState.COMPLETED
-                                persist(Sanitizer.text(reply.text), RunState.COMPLETED)
+                                persist(Sanitizer.conversation(reply.text), RunState.COMPLETED)
                                 return@withTimeout
                             }
                             state.value = RunState.WAITING_USER
-                            persist(Sanitizer.text(reply.text), RunState.WAITING_USER)
+                            persist(Sanitizer.conversation(reply.text), RunState.WAITING_USER)
                             question.value = reply.text
                             val answer = corrections.receive()
-                            context += message("user", answer)
+                            addReply(answer)
                             question.value = ""
                             continue
                         }
@@ -361,7 +391,7 @@ class Agent(
                                 // replan with it.
                                 val steer = corrections.tryReceive().getOrNull()
                                 if (steer != null) {
-                                    context += message("user", steer)
+                                    addReply(steer)
                                     results += ToolResult("cancelled_for_correction")
                                     discardRemaining = "cancelled_for_correction"
                                     break
@@ -409,7 +439,7 @@ class Agent(
                                                 corrections.tryReceive().getOrNull()
                                             else null
                                         if (update == null) throw e
-                                        context += message("user", update)
+                                        addReply(update)
                                         discardRemaining = "cancelled_for_correction"
                                         results += ToolResult("cancelled_for_correction")
                                         break
@@ -451,15 +481,16 @@ class Agent(
                                             action.text.lines().filter { it.isNotBlank() }.take(30)
                                     Op.ASK -> {
                                         state.value = RunState.WAITING_USER
-                                        persist(Sanitizer.text(action.text), RunState.WAITING_USER)
+                                        persist(Sanitizer.conversation(action.text), RunState.WAITING_USER)
                                         question.value = action.text
                                         val answer = corrections.receive()
-                                        results += ToolResult("user_answer", answer)
+                                        results += ToolResult("user_answer", answer.text)
+                                        addReply(answer)
                                         question.value = ""
                                     }
                                     Op.COMPLETE -> {
                                         state.value = RunState.COMPLETED
-                                        persist(Sanitizer.text(action.text), state.value)
+                                        persist(Sanitizer.conversation(action.text), state.value)
                                         return@withTimeout
                                     }
                                     else -> Unit
@@ -483,7 +514,12 @@ class Agent(
                                             )
                                         ),
                                 )
-                            results.mapNotNull { it.image }.forEach { appendScreenImage(it) }
+                            results.filter { it.image != null }.forEach { result ->
+                                if (provider.supportsImages) {
+                                    if (result.status == "attachment") appendDocumentImage(result.image!!, result.content)
+                                    else appendScreenImage(result.image!!)
+                                } else context += message("user", "A retained image is available, but this selected model does not accept images. Use retained text or ask the user to choose an image-capable model.")
+                            }
                         }
                     }
                     throw SafeFailure("run_budget")

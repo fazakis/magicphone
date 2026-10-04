@@ -26,6 +26,15 @@ object Sanitizer {
     fun text(input: String): String =
         patterns.fold(input.take(32_768)) { s, r -> r.replace(s, "[redacted]") }
 
+    // Conversation documents may contain long receipt/customer references. Keep those exact;
+    // explicit credentials and labelled card numbers still do not belong in retained prose.
+    fun conversation(input: String): String {
+        val safe = patterns.filterIndexed { index, _ -> index != 3 }
+            .fold(input.take(32_768)) { s, r -> r.replace(s, "[redacted]") }
+        return Regex("(?i)(card(?: number)?|credit card|debit card|αριθμός κάρτας)\\s*[:=]\\s*[0-9 -]{13,25}")
+            .replace(safe, "$1: [redacted]")
+    }
+
     fun event(action: Action, status: String) =
         Audit(
             id(),
@@ -42,7 +51,11 @@ data class Message(
     val role: String,
     val text: String,
     val time: Long = System.currentTimeMillis(),
+    val attachments: List<Attachment> = emptyList(),
 )
+
+@Serializable
+data class Attachment(val id: String, val available: Boolean = true)
 
 @Serializable
 data class Audit(
@@ -75,7 +88,7 @@ data class Knowledge(
 
 @Serializable
 data class Archive(
-    val schema: Int = 2,
+    val schema: Int = 3,
     val conversations: List<Conversation> = emptyList(),
     val audits: List<Audit> = emptyList(),
     val knowledge: List<Knowledge> = emptyList(),
@@ -91,13 +104,13 @@ object Archives {
         require(bytes.size <= MAX)
         val raw = JsonCodec.parseToJsonElement(bytes.decodeToString()).jsonObject
         val version = raw.int("schema")
-        require(version in 1..2)
+        require(version in 1..3)
         val archive =
             JsonCodec.decodeFromJsonElement(
                 Archive.serializer(),
                 kotlinx.serialization.json.JsonObject(
                     raw.toMutableMap().apply {
-                        put("schema", kotlinx.serialization.json.JsonPrimitive(2))
+                        put("schema", kotlinx.serialization.json.JsonPrimitive(3))
                     }
                 ),
             )
@@ -117,7 +130,10 @@ object Archives {
                         it.role in setOf("user", "assistant", "system") &&
                         it.text.length <= 32768
                 )
+                require(it.attachments.size <= 3 && it.attachments.map { a -> a.id }.distinct().size == it.attachments.size)
+                require(it.attachments.all { a -> a.id.matches(Regex("[a-f0-9]{64}")) })
             }
+            require(c.messages.flatMap { it.attachments }.distinctBy { it.id }.size <= 60)
         }
         archive.audits.forEach {
             require(
@@ -141,6 +157,8 @@ object Archives {
                             "apps",
                             "catalog",
                             "remote_result",
+                            "recalled",
+                            "attachment",
                         )
             )
         }
@@ -177,7 +195,7 @@ object Archives {
                 a.conversations.map { c ->
                     c.copy(
                         title = Sanitizer.text(c.title),
-                        messages = c.messages.map { it.copy(text = Sanitizer.text(it.text)) },
+                        messages = c.messages.map { it.copy(text = Sanitizer.conversation(it.text)) },
                     )
                 },
             knowledge = a.knowledge.map { it.copy(content = Sanitizer.text(it.content)) },
@@ -195,7 +213,10 @@ object Archives {
         read(bytes).let { a ->
             a.copy(
                 audits = emptyList(),
-                conversations = a.conversations.map { it.copy(state = RunState.INTERRUPTED) },
+                // Backups contain references, not photo bytes. Imported references may not open
+                // an unrelated local photo even if an attacker guesses its content hash.
+                conversations = a.conversations.map { c -> c.copy(state = RunState.INTERRUPTED,
+                    messages = c.messages.map { m -> m.copy(attachments = m.attachments.map { it.copy(available = false) }) }) },
                 knowledge = a.knowledge.map { it.copy(reviewed = false) },
                 scripts = a.scripts.map { it.copy(enabled = false) },
             )

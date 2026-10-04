@@ -76,4 +76,9 @@ class Vault(context: Context) {
     fun delete(name: String) {
         file(name).delete()
     }
+
+    @Synchronized
+    fun attachmentNames(): Set<String> = root.listFiles().orEmpty().map { it.name }
+        .map { it.removeSuffix(".bak").removeSuffix(".enc") }
+        .filter { it.matches(Regex("attachment-[a-f0-9]{64}")) }.toSet()
 }

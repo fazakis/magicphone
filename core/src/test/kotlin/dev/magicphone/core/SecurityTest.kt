@@ -158,7 +158,7 @@ class SecurityTest {
 
     @Test
     fun migrationOneToTwo() {
-        assertEquals(2, Archives.read("{\"schema\":1}".toByteArray()).schema)
+        assertEquals(3, Archives.read("{\"schema\":1}".toByteArray()).schema)
     }
 
     @Test

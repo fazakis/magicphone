@@ -258,6 +258,10 @@ fun Field(value: String, label: Int, change: (String) -> Unit, secret: Boolean =
 
 fun errorResource(code: String): Int =
     when {
+        code == "attachment_limit" -> R.string.attachment_limit
+        code == "images_unsupported" -> R.string.attachment_model_unsupported
+        code in setOf("attachment_save_failed", "reply_not_accepted") -> R.string.attachment_save_failed
+        code == "conversation_changed" -> R.string.voice_chat_changed
         code == "screen_context_changed" -> R.string.screen_context_changed
         code == "unsupported_model_setting" -> R.string.unsupported_model_setting
         code == "voice_unavailable" -> R.string.voice_unavailable
@@ -338,8 +342,8 @@ fun AppUi(r: AppRuntime, focusRequest: Long, shared: String, uri: Uri?, consumed
         updateVisibility()
         onDispose { lifecycle.removeObserver(observer); r.visibleChat.value = null }
     }
-    val draft = rememberSaveable { mutableStateOf("") }
-    var images by remember { mutableStateOf<List<String>>(emptyList()) }
+    val draft = rememberSaveable(current) { mutableStateOf("") }
+    var images by remember(current) { mutableStateOf<List<String>>(emptyList()) }
     val activity = androidx.activity.compose.LocalActivity.current as MainActivity
     LaunchedEffect(focusRequest) { if (focusRequest > 0) tab = 0 }
     LaunchedEffect(shared, uri) {
@@ -536,6 +540,7 @@ fun TaskPage(
                         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (msg.role != "user") Text("MagicPhone", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                             SelectionContainer { Text(msg.text, style = MaterialTheme.typography.bodyLarge) }
+                            msg.attachments.forEach { photo -> AttachmentPhoto(r, photo) }
                             if (msg.role == "assistant" && msg.text.isNotBlank()) ReadAloudButton(r, msg.id, msg.text)
                         }
                     }
@@ -586,6 +591,8 @@ fun TaskPage(
 @OptIn(ExperimentalLayoutApi::class)
 private fun TaskComposer(r: AppRuntime, draft: MutableState<String>, images: List<String>,
     setImages: (List<String>) -> Unit, focusRequest: Long) {
+    val submitting by r.submitting.collectAsStateWithLifecycle()
+    val latestImages by rememberUpdatedState(images)
     val state by r.agent.state.collectAsStateWithLifecycle()
     val settings by r.settings.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
@@ -670,8 +677,15 @@ private fun TaskComposer(r: AppRuntime, draft: MutableState<String>, images: Lis
                 Text(selected?.modelLabel().orEmpty().ifBlank { s(R.string.choose_model) },
                     Modifier.weight(1f).padding(end = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button({ r.start(draft.value, images, secondary); draft.value = ""; setImages(emptyList()) },
-                    enabled = draft.value.isNotBlank(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)) {
+                Button({
+                    val submittedText = draft.value
+                    val submittedImages = images
+                    r.start(submittedText, submittedImages, secondary, onAccepted = {
+                        if (draft.value == submittedText) draft.value = ""
+                        if (latestImages == submittedImages) setImages(emptyList())
+                    })
+                },
+                    enabled = draft.value.isNotBlank() && !submitting, contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)) {
                     Text(s(if (state in setOf(RunState.WAITING_USER, RunState.ACTING, RunState.PLANNING,
                         RunState.PAUSED, RunState.WAITING_APPROVAL)) R.string.send else R.string.start))
                     Spacer(Modifier.width(6.dp))
@@ -1080,6 +1094,7 @@ fun DataPage(r: AppRuntime) {
                 }
         }
     Label(s(R.string.privacy))
+    Info(s(R.string.attachment_privacy))
     BoxCard {
         Field(retention, R.string.retention, { retention = it })
         Button({

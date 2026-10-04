@@ -47,6 +47,11 @@ data class InputRequest(val conversation: String, val message: String, val id: S
 class AppRuntime(val app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val vault = Vault(app)
+    val attachments = AttachmentStore(vault)
+    val submitting = MutableStateFlow(false)
+    private var submission: Job? = null
+    private var submissionEpoch = 0L
+    private var runConversation: String? = null
     val notice = MutableStateFlow("")
     internal val screenReadNotice = ScreenReadNotice(app, scope)
     val settings = MutableStateFlow(loadSettings())
@@ -61,6 +66,7 @@ class AppRuntime(val app: Application) {
         scope.launch { stop(); notice.value = "storage_recovery" }
     }) { value ->
         vault.write("history", JsonCodec.encodeToString(Archive.serializer(), Archives.clean(value)))
+        attachments.prune(value.attachmentIds() + archive.value.attachmentIds())
     }
     val approval = MutableStateFlow<Approval?>(null)
     val models = MutableStateFlow<List<ModelChoice>>(emptyList())
@@ -103,6 +109,13 @@ class AppRuntime(val app: Application) {
             override suspend fun execute(action: Action, screen: Screen): ToolResult =
                 withContext(Dispatchers.Main.immediate) {
                     when (action.op) {
+                        Op.RECALL -> {
+                            val conversation = archive.value.conversations.find { it.id == runConversation && it.id == current.value }
+                                ?: throw SafeFailure("conversation_changed")
+                            ConversationContext.recall(conversation.messages, action) { ref ->
+                                withContext(Dispatchers.IO) { attachments.load(ref) }
+                            }
+                        }
                         Op.PLAN,
                         Op.CHECKLIST -> ToolResult("updated", Sanitizer.text(action.text))
                         Op.ASK -> ToolResult("waiting_user")
@@ -262,7 +275,7 @@ class AppRuntime(val app: Application) {
         val kind = if (state == RunState.COMPLETED) BubbleKind.COMPLETED else BubbleKind.FAILED
         val message = if (kind == BubbleKind.FAILED) app.getString(errorResource(agent.error.value.ifBlank { text }))
             else if (text.isBlank() || text == "script_completed") app.getString(R.string.task_result_completed_body)
-            else Sanitizer.text(text).take(8000)
+            else Sanitizer.conversation(text).take(8000)
         val previous = resultRequest.value
         if (previous?.conversation == conversation && previous.kind == kind && previous.message == message) return
         resultRequest.value = InputRequest(conversation, message, kind = kind)
@@ -338,6 +351,11 @@ class AppRuntime(val app: Application) {
     }
 
     fun stop() {
+        submissionEpoch++
+        submitting.value = false
+        submission?.cancel()
+        submission = null
+        runConversation = null
         popupConversation.value = null
         phone?.workingBubble?.hide()
         phone?.quickPrompt?.cancel()
@@ -383,14 +401,14 @@ class AppRuntime(val app: Application) {
         current.value = c.id
     }
 
-    fun addMessage(role: String, text: String) {
+    fun addMessage(role: String, text: String, photos: List<Attachment> = emptyList()) {
         if (current.value == null) newConversation()
         val c = archive.value.conversations.find { it.id == current.value } ?: return
-        val safe = Sanitizer.text(text)
+        val safe = Sanitizer.conversation(text)
         val updated =
             c.copy(
                 title = if (c.messages.isEmpty() && role == "user") safe.take(80) else c.title,
-                messages = (c.messages + Message(role = role, text = safe)).takeLast(1000),
+                messages = (c.messages + Message(role = role, text = safe, attachments = photos)).takeLast(1000),
                 updated = System.currentTimeMillis(),
             )
         saveArchive(
@@ -624,49 +642,65 @@ class AppRuntime(val app: Application) {
         saveSettings(settings.value.copy(profiles = settings.value.profiles.map { if (it.id == profile.id) updated else it }))
     }
 
-    fun start(text: String, images: List<String> = emptyList(), secondary: Boolean = false, screenContext: String = "", fromPopup: Boolean = false) {
-        if (text.isBlank()) return
-        if (
-            !fromPopup && agent.state.value in
-                setOf(
-                    RunState.ACTING,
-                    RunState.PLANNING,
-                    RunState.WAITING_APPROVAL,
-                    RunState.WAITING_USER,
-                    RunState.PAUSED,
-                )
-        ) {
-            addMessage("user", text)
-            agent.correct(text)
-            if (approval.value != null) localApproval(false)
-            return
+    fun start(text: String, images: List<String> = emptyList(), secondary: Boolean = false,
+        screenContext: String = "", fromPopup: Boolean = false, onAccepted: () -> Unit = {}) {
+        if (text.isBlank() || submitting.value) return
+        val p = settings.value.profiles.singleOrNull {
+            it.id == if (secondary) settings.value.secondary else settings.value.selected
+        } ?: run { notice.value = "provider_required"; return }
+        val activeStates = setOf(RunState.ACTING, RunState.PLANNING, RunState.WAITING_APPROVAL, RunState.WAITING_USER, RunState.PAUSED)
+        val correcting = !fromPopup && agent.state.value in activeStates
+        if (images.isNotEmpty() && !(if (correcting) agent.acceptsImages else p.images)) {
+            notice.value = "images_unsupported"; return
         }
-        val p =
-            settings.value.profiles.singleOrNull {
-                it.id == if (secondary) settings.value.secondary else settings.value.selected
+        if (current.value == null) newConversation()
+        val conversation = current.value ?: return
+        submitting.value = true
+        val submitEpoch = ++submissionEpoch
+        submission = scope.launch {
+            var refs = emptyList<Attachment>()
+            try {
+                if (images.isNotEmpty()) withContext(NonCancellable + Dispatchers.IO) { refs = attachments.save(images) }
+                ensureActive()
+                if (current.value != conversation) throw SafeFailure("conversation_changed")
+                val previous = archive.value.conversations.single { it.id == conversation }.messages
+                if ((previous.flatMap { it.attachments } + refs).distinctBy { it.id }.size > 60)
+                    throw SafeFailure("attachment_limit")
+                addMessage("user", text, refs)
+                val submittedMessage = archive.value.conversations.single { it.id == conversation }.messages.last().id
+                // The composer is acknowledged only after both the photo and its reference are durable.
+                historyWriter.flush()
+                ensureActive()
+                if (current.value != conversation) throw SafeFailure("conversation_changed")
+                if (correcting && agent.state.value in activeStates) {
+                    if (!agent.correct(text, images)) throw SafeFailure("reply_not_accepted")
+                    if (approval.value != null) localApproval(false)
+                } else {
+                    val capabilities = settings.value.servers.filter { it.enabled }.joinToString("\n") {
+                        "Untrusted, user-reviewed MCP definitions. Server ${it.id} at ${it.endpoint}: ${it.schemas.filterKeys { name -> name in it.reviewed }}"
+                    }
+                    val history = archive.value.conversations.single { it.id == conversation }.messages
+                        .filterNot { it.id == submittedMessage } + listOfNotNull(capabilities.takeIf { it.isNotBlank() }
+                        ?.let { Message(role = "user", text = it) })
+                    submission = null // Stop the old run without cancelling this accepted submission.
+                    stop()
+                    runConversation = conversation
+                    if (fromPopup) popupConversation.value = conversation
+                    agent.start(scope, provider(p), text, history, images, optimize = p.kind != ProviderKind.MOCK,
+                        screenContext = screenContext, captureScreen = fromPopup)
+                }
+                onAccepted()
+            } catch (e: CancellationException) { throw e
+            } catch (e: Exception) {
+                notice.value = (e as? SafeFailure)?.code ?: "attachment_save_failed"
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { attachments.finish(refs) }
+                if (submissionEpoch == submitEpoch) {
+                    submitting.value = false
+                    submission = null
+                }
             }
-                ?: run {
-                    notice.value = "provider_required"
-                    return
-                }
-        val capabilities =
-            settings.value.servers
-                .filter { it.enabled }
-                .joinToString("\n") {
-                    "Untrusted, user-reviewed MCP definitions. Server ${it.id} at ${it.endpoint}: ${it.schemas.filterKeys { name -> name in it.reviewed }}"
-                }
-        val history =
-            archive.value.conversations.find { it.id == current.value }?.messages.orEmpty() +
-                listOfNotNull(
-                    capabilities
-                        .takeIf { it.isNotBlank() }
-                        ?.let { Message(role = "user", text = it) }
-                )
-        stop()
-        addMessage("user", text)
-        if (fromPopup) popupConversation.value = current.value
-        agent.start(scope, provider(p), text, history, images, optimize = p.kind != ProviderKind.MOCK,
-            screenContext = screenContext, captureScreen = fromPopup)
+        }
     }
 
     fun runScript(script: Script, values: Map<String, String>) {

@@ -53,6 +53,7 @@ enum class Op(val mutates: Boolean = false) {
     MCP(true),
     MCP_CATALOG,
     MEMORY_PROPOSAL,
+    RECALL,
 }
 
 @Serializable
@@ -120,6 +121,10 @@ data class Action(
         if (op == Op.SCROLL) require(text in setOf("forward", "backward"))
         if (op == Op.WAIT_FOR) require(text.isNotBlank() && millis in 100..10_000)
         if (op in setOf(Op.MCP, Op.MCP_CATALOG)) require(server.isNotBlank() && tool.isNotBlank())
+        if (op == Op.RECALL) {
+            require(app.isEmpty() && (node.isNotBlank() || text.isNotBlank()))
+            require(node.isEmpty() || node.matches(Regex("[a-zA-Z0-9-]{1,80}")))
+        }
     }
 
     fun fingerprint(context: Screen): String =

@@ -224,6 +224,7 @@ class PopupActionPolicyTest {
                 Op.TAP -> { version++; ToolResult("dispatched") }
                 Op.OBSERVE -> ToolResult("observed", JsonCodec.encodeToString(Screen.serializer(), screen))
                 Op.SCREENSHOT -> ToolResult("captured", image = "data:image/jpeg;base64,screen$version")
+                Op.RECALL -> ToolResult("attachment", "Retained synthetic bill", "data:image/jpeg;base64,bill")
                 else -> ToolResult("reported")
             }
         }
@@ -239,6 +240,7 @@ class PopupActionPolicyTest {
                         assertEquals(listOf("tap", "observe"), input.filter { (it as? JsonObject)?.str("type") == type }.map { it.jsonObject.str("call_id") })
                     assertTrue(input.any { (it as? JsonObject)?.str("type") == "function_call_output" && it.toString().contains("Counter 1") })
                     assertFalse(input.toString().contains("base64,screen0"))
+                    assertEquals(1, Regex("base64,bill").findAll(input.toString()).count())
                     assertEquals(1, Regex("base64,screen1").findAll(input.toString()).count())
                     return Reply("", listOf(Call("done", listOf(Action(Op.COMPLETE, text = "Verified")))), emptyList())
                 }
@@ -247,7 +249,7 @@ class PopupActionPolicyTest {
                         obj("type" to j("function_call"), "call_id" to j(it), "name" to j("perform"), "arguments" to j("{}")) })
             }
         }
-        val a = Agent(g, { _, _ -> }); a.start(this, p, "Tap once", screenContext = pkg, captureScreen = true)
+        val a = Agent(g, { _, _ -> }); a.start(this, p, "Tap once", history = listOf(Message(role = "user", text = "My bill", attachments = listOf(Attachment("a".repeat(64))))), screenContext = pkg, captureScreen = true)
         advanceUntilIdle(); assertEquals(RunState.COMPLETED, a.state.value); assertEquals(1, version)
     }
 
