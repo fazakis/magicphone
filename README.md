@@ -28,7 +28,9 @@ The landing page lives in [`site/`](site/) in this repository and deploys indepe
 
 ## Build
 
-The installable **0.2.10 early-access APK** is available in [GitHub Releases](https://github.com/fazakis/magicphone/releases/tag/v0.2.10). Download `magicphone-0.2.10-debug.apk` for Android 11+. This is the verified development build, signed with the same Android debug certificate as the preceding QA updates; it is not production signed. The release includes checksums, signing identity, license notices and current verification limits. Install over a matching-signer build to preserve app data.
+The installable **0.2.11 early-access APK** is available in [GitHub Releases](https://github.com/fazakis/magicphone/releases/tag/v0.2.11). Download `magicphone-0.2.11-release.apk` for Android 11+. It is a non-debuggable release build signed with the dedicated MagicPhone release key. Android signing-key rotation allows it to upgrade the project's previous published debug-signed APKs without uninstalling. The release includes checksums, signing identity, license notices and current verification limits. Builds signed with an unrelated developer key are not covered by that migration.
+
+For update notifications, install [Obtainium](https://obtainium.imranr.dev/), choose **Add app**, and use `https://github.com/fazakis/magicphone` as the source URL. Select the `-release.apk` asset if prompted. Obtainium tracks the GitHub releases; no separate store account is required. The [website](https://magicphone.org/#get-started) also has an Add to Obtainium link.
 
 Prerequisites: JDK 21, Android SDK **platform 37.0**, build-tools 36.0.0, and network access for pinned build dependencies. Set `ANDROID_HOME` or create the ignored `local.properties` with `sdk.dir=...`. `targetSdk=36`, `minSdk=30`; current Compose needs `compileSdk=37`.
 
@@ -53,7 +55,7 @@ Application ID defaults to `dev.magicphone.app`. Override it with `-Pmagicphone.
 
 ## Install and first task
 
-1. Copy the debug APK onto an Android 11+ phone and open it. Grant the installer permission manually when Android asks. Production users should install a release signed by a trusted distributor.
+1. Download the official release APK onto an Android 11+ phone and open it. Grant the installer permission manually when Android asks. Install over the previous official build to retain its data; do not uninstall first.
 2. Read onboarding. In Settings, open Android Accessibility settings and manually enable MagicPhone. Android may require **Allow restricted settings** in App info for a sideloaded app. The agent cannot approve this itself.
 3. Enable notification controls. Pause/Resume and Stop live in an ongoing notification while Accessibility is connected; the old floating bar is removed, including on upgrades. Tap the notification to open the current chat and keyboard. Pressing the Android Accessibility shortcut over another app opens a prompt panel on that screen; its Open chat button opens the full conversation. A running task pauses so it cannot take the screen back; tap Resume to continue. Android 14+ can allow dismissing an ongoing notification; opening MagicPhone restores it.
 4. Tap the microphone in the chat message field or Accessibility popup to dictate through your Android speech provider. Review or edit the returned text, then Send. No OpenAI API key is required. Recognition availability, language support and offline behavior depend on the provider; it may send audio to its own servers.

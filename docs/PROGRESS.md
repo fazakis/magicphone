@@ -1,6 +1,8 @@
 # Implementation progress and verification
 
-Repository: `~/magicphone`, branch `codex/magicphone`. The user-owned `INSTRUCTIONS.md` is ignored. Original code is MIT OR Apache-2.0. Repository and GitHub Pages publication are now authorized; no production signing key has been used.
+Repository: `~/magicphone`, branch `codex/magicphone`. The user-owned `INSTRUCTIONS.md` is ignored. Original code is MIT OR Apache-2.0. Repository and GitHub Pages publication are authorized.
+
+**Distribution preparation (0.2.11, 2026-10-05).** Added a dedicated release signature and Android v3 rotation from the previous official debug identity, preserving updates without uninstalling. Private signing material is stored outside the repository. Added a repeatable signing helper, Obtainium installation instructions, real UI screenshots and an explicitly labelled deterministic practice demo for publishing. App runtime behavior is unchanged from 0.2.10. See [0.2.11 verification](VERIFICATION-0.2.11.md) for actual build, upgrade and release-APK test results; store submissions and acceptance are separate from this verification.
 
 **Public documentation cleanup (2026-10-02).** Removed personal bylines and repeated attribution from the README, website and explanatory documentation, and removed operational domain configuration details. Copyright and license notices remain in the license files and source headers. Checked the updated text, local website links/anchors and diff; this is a documentation-only change.
 

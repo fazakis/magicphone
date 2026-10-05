@@ -2,7 +2,7 @@
 
 Implementation and verification are separate. **Implemented** identifies actual reachable code; **unit** means deterministic host tests, **device** means instrumentation on an isolated Android emulator, and **external** means the named account/device/server is still required. See PROGRESS, [Android 15 remote verification](VERIFICATION-API35.md), and [the later Xiaomi investigation](VERIFICATION-XIAOMI.md) for exact results; this table never treats a mock provider as live integration.
 
-Latest release APK: **0.2.10**, with retained uploaded photos and conversation-scoped retrieval. **140 core tests pass**. Android 15 verifies photo follow-ups with real ChatGPT, storage/branching/deletion, process restart and existing popup/reply/UI flows; Android 11 verifies attachment behavior and process restart. Lint: 0 errors / 12 warnings. [Exact counts, skips and limits](VERIFICATION-0.2.10.md).
+Latest release APK: **0.2.11**, a production-signed, non-debuggable package with a data-preserving signing rotation from the previous official debug APKs. Runtime features are unchanged from 0.2.10. **140 core tests pass**; release lint reports 0 errors / 12 warnings. [Release packaging and device checks](VERIFICATION-0.2.11.md). The earlier [0.2.10 verification](VERIFICATION-0.2.10.md) records uploaded-photo, live ChatGPT, restart and popup regression coverage; those live-account tests were not rerun for this packaging update.
 
 | Requirement | Implementation | Verification / remaining check |
 |---|---|---|
