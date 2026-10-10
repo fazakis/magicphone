@@ -1,0 +1,19 @@
+WEBVTT
+
+00:00.000 --> 00:02.750
+[On screen: “Describe the numbers in table 1.”]
+
+00:02.750 --> 00:03.400
+[Waiting time shortened]
+
+00:03.418 --> 00:07.893
+Table one summarizes the dataset and how it is divided
+for model training and evaluation.
+
+00:08.923 --> 00:13.229
+Ten thousand eight hundred fifty-seven is the number
+of samples remaining after preprocessing.
+
+00:14.285 --> 00:18.503
+Twenty-five is the number of input features:
+the variables describing each sample.

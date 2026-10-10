@@ -16,7 +16,7 @@ Open `http://127.0.0.1:8765`. The three screenshot selectors show the actual hom
 
 The website is published at [magicphone.org](https://magicphone.org/). The canonical URL, sitemap and Open Graph metadata use that address.
 
-The call to action links to the 0.2.2 early-access GitHub Release, with source/build instructions still available. The release identifies the installable APK as debug signed. APKs are separate GitHub Release assets; the website workflow only publishes static site files.
+The call to action links to the 0.2.12 early-access GitHub Release, with source/build instructions still available. The APK uses the dedicated production signing identity and update lineage. APKs are separate GitHub Release assets; the website workflow only publishes static site files.
 
 ## Content updates
 
@@ -76,3 +76,16 @@ Version 0.2.7 updates the landing-page release link to the large-screenshot/acti
 Version 0.2.9 updates the landing-page download link to the general visible-window and focus-handling release.
 
 Version 0.2.10 updates the landing-page download link to the retained-photo and conversation-context release.
+
+
+## Spoken-explanation showcase (2026-10-10)
+
+The homepage now includes a real-device recording under “Hear the explanation. Follow the highlight.” The hero and main navigation link directly to `#showcase`. The recording shows a current-screen prompt and the first three spoken sections of a PDF table explanation: the heading, 10,857 samples and 25 input features. The original is retained locally in ignored artifacts; only the edited public copy, poster and English captions are published.
+
+Editing keeps source intervals **00:00.000–00:02.750** and **00:19.150–00:35.200**. This removes **16.4 seconds** of waiting, then ends before the next spoken section begins. Original duration: **38.369683 s**; final MP4: **18.835 s**, rounded to 19 seconds in the UI. No narration or explanation highlights are accelerated, synthesized or replaced. The webpage and video metadata disclose that waiting time was shortened. The original audio/video timing within each retained segment is preserved; the last 150 ms of silent tail fades out.
+
+`site/assets/showcase-explain.mp4` is H.264 High/yuv420p, 1280×1444 at 24 fps, with mono AAC audio and front-loaded MP4 metadata for progressive playback. It is **1,113,954 bytes**; SHA-256 `8f23282b68e0a72622a3d7409b231b1b8e6d5575e2a32f4a783a3068a13306e3`. The JPEG poster is an actual frame showing the highlighted sample count. The English WebVTT track is transcribed from the app’s on-screen spoken text and timed to the original audio segments. A native disclosure provides the equivalent transcript, including the prompt and edit notice.
+
+Video playback requires a click; there is no autoplay, third-party embed or tracking. `preload="none"` keeps the video off the initial loading path. Native playback/fullscreen/caption controls and a direct MP4 link work without JavaScript. The optional Play/Pause/Watch again button uses the same native player and scrolls it into view on phones. The layout preserves the full recording frame, and users can switch to fullscreen to inspect the document more closely.
+
+Verification: the complete edited media decodes without errors; the `moov` box precedes `mdat`; local HTML assets/anchors and JavaScript syntax pass checks. Browser playback runs at rate 1 with the correct 18.835-second duration, captions render with the spoken sections, and the transcript opens. Browser checks pass at 1280 px desktop, 768 px tablet and 390/320 px phone widths without horizontal overflow or console warnings/errors. Play, Pause, completion, replay, visible captions and transcript disclosure were exercised. This is a website-only update; the Android app and release APK are unchanged.

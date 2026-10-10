@@ -39,3 +39,31 @@ document.querySelectorAll('[data-preview]').forEach((button) => {
     });
   });
 });
+
+// Native controls remain available with JavaScript disabled. Never autoplay sound.
+const showcaseVideo = document.querySelector('#showcase-video');
+const showcasePlay = document.querySelector('#showcase-play');
+const showcasePlayLabel = document.querySelector('#showcase-play-label');
+if (showcaseVideo && showcasePlay && showcasePlayLabel) {
+  showcasePlay.hidden = false;
+  const updateShowcaseControl = () => {
+    showcasePlayLabel.textContent = showcaseVideo.ended ? 'Watch again' : showcaseVideo.paused ? 'Play demo' : 'Pause demo';
+    showcasePlay.querySelector('[aria-hidden]').textContent = showcaseVideo.paused ? '▶' : 'Ⅱ';
+  };
+  showcasePlay.addEventListener('click', async () => {
+    if (!showcaseVideo.paused) showcaseVideo.pause();
+    else {
+      if (showcaseVideo.ended) showcaseVideo.currentTime = 0;
+      try {
+        await showcaseVideo.play();
+        if (window.innerWidth <= 800) showcaseVideo.scrollIntoView({
+          behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+          block: 'center',
+        });
+      }
+      catch { showcaseVideo.focus(); }
+    }
+    updateShowcaseControl();
+  });
+  ['play', 'pause', 'ended'].forEach((event) => showcaseVideo.addEventListener(event, updateShowcaseControl));
+}

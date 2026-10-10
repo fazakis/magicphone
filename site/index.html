@@ -23,7 +23,7 @@
     <a class="brand" href="./" aria-label="MagicPhone home"><img src="assets/mark.svg" width="36" height="36" alt=""><span>MagicPhone<span class="brand-dot">.</span></span></a>
     <nav aria-label="Main navigation">
       <a href="#how-it-works">How it works</a>
-      <a href="#your-control">Your control</a>
+      <a href="#showcase">Watch demo</a>
       <a class="nav-source" href="https://github.com/fazakis/magicphone">GitHub <span aria-hidden="true">↗</span></a>
     </nav>
   </header>
@@ -34,7 +34,7 @@
         <h1 id="hero-title">Your phone.<br>Your <span class="serif">say.</span><svg class="title-spark" viewBox="0 0 60 70" aria-hidden="true"><path d="M30 0 37 24 60 35 37 42 30 70 22 44 0 35 23 26Z"/></svg></h1>
         <p class="hero-description">Say what you want to do.<br>Let your phone handle the taps.</p>
         <p class="hero-detail">MagicPhone is an AI assistant that works across your Android apps. Give it a task, follow along, and take the lead whenever you want.</p>
-        <div class="hero-actions"><a class="button primary" href="#get-started">Meet your new assistant <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/fazakis/magicphone">Explore the code <span aria-hidden="true">↗</span></a></div>
+        <div class="hero-actions"><a class="button primary" href="#get-started">Meet your new assistant <span aria-hidden="true">↗</span></a><a class="text-link" href="#showcase"><span aria-hidden="true">▶</span> Watch the 19-second demo</a></div>
         <div class="hero-footnote"><span>Android 11+</span><i aria-hidden="true"></i><span>No root needed</span><i aria-hidden="true"></i><span>Early access</span></div>
       </div>
       <div class="hero-visual">
@@ -47,6 +47,34 @@
     </section>
     <section class="example-strip" aria-label="Explore MagicPhone screenshots">
       <div class="wrap examples"><span class="example-label">TAKE A LOOK INSIDE</span><div class="example-options" role="group" aria-label="Choose an app screenshot"><button class="example-button" type="button" data-preview="home" aria-controls="app-preview" aria-pressed="true"><span aria-hidden="true">↗</span> Your next task</button><button class="example-button" type="button" data-preview="models" aria-controls="app-preview" aria-pressed="false"><span aria-hidden="true">☼</span> Model &amp; thinking</button><button class="example-button" type="button" data-preview="result" aria-controls="app-preview" aria-pressed="false"><span aria-hidden="true">✓</span> A completed task</button></div></div>
+    </section>
+    <section class="section wrap showcase" id="showcase" aria-labelledby="showcase-title">
+      <div class="showcase-copy">
+        <p class="eyebrow"><span class="status-dot" aria-hidden="true"></span> SEE IT ON A REAL PHONE</p>
+        <h2 id="showcase-title">Hear the explanation.<br><span class="serif">Follow the highlight.</span></h2>
+        <p class="showcase-description">Ask about what’s on your screen. MagicPhone explains it aloud, highlighting the exact number, text or equation term as it speaks.</p>
+        <blockquote class="showcase-prompt">“Describe the numbers in table 1.”</blockquote>
+        <p class="showcase-detail">In this recording, the focus moves from the table heading to <strong>10,857 samples</strong>, then <strong>25 input features</strong>. The spoken explanation and the highlighted detail stay together.</p>
+        <button class="button primary showcase-play" id="showcase-play" type="button" aria-controls="showcase-video" hidden><span aria-hidden="true">▶</span><span id="showcase-play-label">Play demo</span></button>
+        <p class="showcase-how">Try it: open a screen, tap the Accessibility button, and enable <strong>Explain aloud with highlights</strong>.</p>
+      </div>
+      <figure class="showcase-media">
+        <div class="showcase-video-frame">
+          <video id="showcase-video" controls playsinline preload="none" width="1280" height="1444" poster="assets/showcase-explain-poster.jpg" aria-label="MagicPhone explains a PDF table aloud while highlighting each number" aria-describedby="showcase-caption">
+            <source src="assets/showcase-explain.mp4" type="video/mp4">
+            <track kind="captions" src="assets/showcase-explain.en.vtt" srclang="en" label="English" default>
+            Your browser cannot play this video. <a href="assets/showcase-explain.mp4">Download the showcase</a> or read the transcript below.
+          </video>
+        </div>
+        <figcaption id="showcase-caption"><span>19-second excerpt · Sound on</span><span>Waiting time shortened. Narration and highlights play at their original speed.</span></figcaption>
+        <div class="showcase-links"><a href="assets/showcase-explain.mp4">Open video</a><span>Use fullscreen for a closer look.</span></div>
+        <details class="showcase-transcript"><summary>Read the video transcript</summary><div>
+          <p><strong>On screen:</strong> “Describe the numbers in table 1” is submitted with Explain aloud with highlights enabled. The waiting time is shortened.</p>
+          <p><strong>Table heading highlighted:</strong> “Table one summarizes the dataset and how it is divided for model training and evaluation.”</p>
+          <p><strong>10,857 highlighted:</strong> “Ten thousand eight hundred fifty-seven is the number of samples remaining after preprocessing.”</p>
+          <p><strong>25 highlighted:</strong> “Twenty-five is the number of input features: the variables describing each sample.”</p>
+        </div></details>
+      </figure>
     </section>
     <section class="section wrap" id="how-it-works" aria-labelledby="how-title">
       <div class="section-heading"><p class="eyebrow">FROM WORDS TO ACTION</p><h2 id="how-title">A more natural way<br>to use your phone.</h2><p>You know what you want. MagicPhone helps with the steps in between.</p></div>
