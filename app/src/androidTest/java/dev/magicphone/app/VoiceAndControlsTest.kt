@@ -75,7 +75,7 @@ class VoiceAndControlsTest {
         Configurator.getInstance().setUiAutomationFlags(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         device = UiDevice.getInstance(instrumentation)
         instrumentation.getUiAutomation(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
-        val component = "${context.packageName}/${context.packageName}.PhoneService"
+        val component = "${context.packageName}/${PhoneService::class.java.name}"
         val enabled = device.executeShellCommand("settings get secure enabled_accessibility_services").trim().split(":")
         Assert.assertTrue("Service must already be enabled", component in enabled)
         shortcuts = listOf("accessibility_button_targets", "accessibility_button_mode", "accessibility_button_target_component")

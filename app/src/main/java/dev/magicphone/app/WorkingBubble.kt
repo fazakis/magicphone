@@ -48,7 +48,7 @@ class WorkingBubble(private val service: PhoneService) {
     private fun dp(value: Int) = (service.resources.displayMetrics.density * value).toInt()
     private fun eligible(): Boolean {
         val chat = r.popupConversation.value ?: return false
-        return hiddenForTools == 0 && SystemClock.elapsedRealtime() >= restoreAfter && chat == r.current.value && r.visibleChat.value != chat && !service.hasPromptOrReply &&
+        return hiddenForTools == 0 && service.explanation.plan == null && SystemClock.elapsedRealtime() >= restoreAfter && chat == r.current.value && r.visibleChat.value != chat && !service.hasPromptOrReply &&
             r.agent.screenCapture.value in setOf(ScreenCaptureState.CAPTURED, ScreenCaptureState.UNAVAILABLE) &&
             r.agent.state.value in setOf(RunState.PLANNING, RunState.ACTING, RunState.PAUSED, RunState.WAITING_APPROVAL) &&
             service.getSystemService(PowerManager::class.java).isInteractive &&

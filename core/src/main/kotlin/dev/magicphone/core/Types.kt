@@ -54,6 +54,7 @@ enum class Op(val mutates: Boolean = false) {
     MCP_CATALOG,
     MEMORY_PROPOSAL,
     RECALL,
+    EXPLAIN,
 }
 
 @Serializable
@@ -71,6 +72,7 @@ data class Action(
     val server: String = "",
     val tool: String = "",
     val arguments: JsonObject = JsonObject(emptyMap()),
+    val explanation: Explanation? = null,
 ) {
     val isDevice: Boolean
         get() =
@@ -89,6 +91,7 @@ data class Action(
                     Op.RECENTS,
                     Op.NOTIFICATIONS,
                     Op.WAIT_FOR,
+                    Op.EXPLAIN,
                 )
 
     val coordinate: Boolean
@@ -112,6 +115,7 @@ data class Action(
                     Op.RECENTS,
                     Op.NOTIFICATIONS,
                     Op.SCREENSHOT,
+                    Op.EXPLAIN,
                 )
         )
             require(snapshot.isNotBlank())
@@ -125,6 +129,10 @@ data class Action(
             require(app.isEmpty() && (node.isNotBlank() || text.isNotBlank()))
             require(node.isEmpty() || node.matches(Regex("[a-zA-Z0-9-]{1,80}")))
         }
+        if (op == Op.EXPLAIN) {
+            require(node.isEmpty() && explanation != null)
+            explanation.validate()
+        } else require(explanation == null)
     }
 
     fun fingerprint(context: Screen): String =

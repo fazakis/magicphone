@@ -35,6 +35,7 @@ class PhoneService : AccessibilityService() {
     private var dismissedRequest: String? = null
     val quickPrompt by lazy { QuickPrompt(this) }
     val workingBubble by lazy { WorkingBubble(this) }
+    val explanation by lazy { GuidedExplanation(this) }
     internal val hasPromptOrReply get() = overlay != null || inputBubble != null || quickPrompt.view != null || quickPrompt.voiceActive
     private var bubbleSpeech: TextView? = null
     private var speechObserver: Job? = null
@@ -62,6 +63,7 @@ class PhoneService : AccessibilityService() {
                         workingBubble.hide()
                         quickPrompt.cancel()
                         runtime.speech.stop()
+                        explanation.stop()
                         runtime.localApproval(false)
                         runtime.agent.pause()
                     } else updateControls()
@@ -83,17 +85,20 @@ class PhoneService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        explanation.onEvent(event)
         // State binding is derived from a fresh filtered tree, not delayed event order.
         if (getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
             runtime.agent.pause()
             quickPrompt.cancel()
             runtime.speech.stop()
+            explanation.stop()
             hideInputBubble()
         } else if (event?.eventType in setOf(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
                 AccessibilityEvent.TYPE_WINDOWS_CHANGED)) { updateInputBubble(); workingBubble.update() }
     }
 
     override fun onInterrupt() {
+        explanation.stop()
         runtime.localApproval(false)
         runtime.agent.pause()
     }
@@ -125,17 +130,21 @@ class PhoneService : AccessibilityService() {
         try {
             withContext(Dispatchers.Main.immediate) {
                 val window = workingBubble.suspendForTool()
+                val explanationWindows = explanation.suspendForTool()
                 suspended = true
-                if (window != null) {
+                val hidden = explanationWindows + listOfNotNull(window)
+                if (hidden.isNotEmpty()) {
                     // Wait only for our removed window to leave Android's window list.
                     var polls = 0
-                    while (windows.any { it.id == window } && polls++ < 12) delay(16)
-                    if (windows.any { it.id == window }) throw SafeFailure("screen_uncertain")
+                    while (windows.any { it.id in hidden } && polls++ < 12) delay(16)
+                    if (windows.any { it.id in hidden }) throw SafeFailure("screen_uncertain")
                 }
             }
             return block()
         } finally {
-            if (suspended) withContext(NonCancellable + Dispatchers.Main.immediate) { workingBubble.resumeAfterTool() }
+            if (suspended) withContext(NonCancellable + Dispatchers.Main.immediate) {
+                workingBubble.resumeAfterTool(); explanation.resumeAfterTool()
+            }
         }
     }
 
@@ -150,6 +159,22 @@ class PhoneService : AccessibilityService() {
     fun foregroundPackage(): String {
         val root = rootInActiveWindow ?: return ""
         return try { root.packageName?.toString().orEmpty() } finally { root.recycle() }
+    }
+
+    /** Window metadata only, used to invalidate a local presentation without reading content. */
+    fun explanationLayout(window: Int, displayId: Int): String {
+        val current = windows
+        val target = current.firstOrNull { it.id == window && it.displayId == displayId } ?: return "missing"
+        return current.filter { it.displayId == displayId && it.layer >= target.layer }.filter { w ->
+            if (w.type != AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY) true
+            else {
+                val root = w.root
+                try { root?.packageName?.toString()?.let { it != packageName } == true } finally { root?.recycle() }
+            }
+        }.joinToString(";") { w ->
+            val b = android.graphics.Rect(); w.getBoundsInScreen(b)
+            "${w.id}:${w.type}:${w.isFocused}:$b"
+        }
     }
 
     private suspend fun awaitSettled(app: String, timeoutMs: Long) {
@@ -252,7 +277,7 @@ class PhoneService : AccessibilityService() {
                     Rect(b.left, b.top, b.right, b.bottom).takeIf { it.left < it.right && it.top < it.bottom }
                 } finally { otherRoot.recycle() }
             }
-            val controlRects = listOfNotNull(overlay, inputBubble, quickPrompt.view, workingBubble.view)
+            val controlRects = (listOfNotNull(overlay, inputBubble, quickPrompt.view, workingBubble.view) + explanation.visibleViews)
                 .filter { it.isAttachedToWindow }.map { view ->
                     val pos = IntArray(2); view.getLocationOnScreen(pos)
                     Rect(pos[0], pos[1], pos[0] + view.width, pos[1] + view.height)
@@ -334,7 +359,7 @@ class PhoneService : AccessibilityService() {
             val rotation = targetDisplay?.rotation ?: 0
             val signature =
                 digest(
-                    "$app|${selected.first.id}|$displayId|$width|$height|$rotation|${selected.first.isFocused}|$rects|$nodes|$capture|$windowBounds|$captureReady|$checks|$windowLayout"
+                    "$app|${selected.first.id}|$displayId|$width|$height|$rotation|${selected.first.isFocused}|$rects|$nodes|$capture|$windowBounds|$captureReady|$checks|$windowLayout|${if (explanation.armed) explanation.revision else 0}"
                 )
             if (signature != lastSignature) {
                 revision++
@@ -425,6 +450,7 @@ class PhoneService : AccessibilityService() {
         val accepted =
             when (action.op) {
                 Op.SCREENSHOT -> return screenshot(action.app, latest)
+                Op.EXPLAIN -> return explanation.present(action, latest)
                 Op.TAP ->
                     if (!latest.focused) {
                         // A physical tap respects window hit testing/modal behavior and can focus
@@ -559,6 +585,7 @@ class PhoneService : AccessibilityService() {
                             continuation.resume(
                                 ToolResult(
                                     "captured",
+                                    content = JsonCodec.encodeToString(Screen.serializer(), before.copy(nodes = emptyList(), protectedRects = emptyList())),
                                     image =
                                         "data:image/jpeg;base64," +
                                             Base64.getEncoder()
@@ -701,7 +728,7 @@ class PhoneService : AccessibilityService() {
         val request = currentBubble()
         val interactive = getSystemService(PowerManager::class.java).isInteractive &&
             !getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        if (request == null || !interactive || overlay != null || quickPrompt.view != null ||
+        if (request == null || !interactive || overlay != null || quickPrompt.view != null || explanation.plan != null ||
             runtime.visibleChat.value == request.conversation || request.id == dismissedRequest) {
             hideInputBubble()
             return
@@ -799,6 +826,7 @@ class PhoneService : AccessibilityService() {
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
+        explanation.screenChanged()
         quickPrompt.cancel()
         workingBubble.hide()
         hideInputBubble()

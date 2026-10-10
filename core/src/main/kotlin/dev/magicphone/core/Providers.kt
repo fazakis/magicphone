@@ -48,6 +48,39 @@ object ToolSchema {
                 putJsonObject(k) { put("type", "integer") }
             }
             putJsonObject("arguments") { put("type", "object") }
+            putJsonObject("explanation") {
+                put("type", "object")
+                put("description", "EXPLAIN only, when the user enables Explain aloud. Complete spoken answer divided into short sections. Regions use 0..1000 coordinates relative to the current screenshot captureBounds, not the full display. Empty regions if location is uncertain. This finishes the task; do not call COMPLETE afterwards.")
+                putJsonObject("properties") {
+                    putJsonObject("sections") {
+                        put("type", "array"); put("minItems", 1); put("maxItems", 24)
+                        putJsonObject("items") {
+                            put("type", "object")
+                            putJsonObject("properties") {
+                                putJsonObject("text") { put("type", "string"); put("maxLength", 1200) }
+                                putJsonObject("regions") {
+                                    put("type", "array"); put("maxItems", 8)
+                                    putJsonObject("items") {
+                                        put("type", "object")
+                                        putJsonObject("properties") {
+                                            listOf("left", "top", "right", "bottom").forEach { key ->
+                                                putJsonObject(key) { put("type", "integer"); put("minimum", 0); put("maximum", 1000) }
+                                            }
+                                            putJsonObject("style") { put("type", "string"); put("enum", JsonArray(listOf("rectangle", "pointer", "underline", "ellipse", "highlight").map(::j))) }
+                                        }
+                                        put("required", JsonArray(listOf("left", "top", "right", "bottom").map(::j)))
+                                        put("additionalProperties", false)
+                                    }
+                                }
+                            }
+                            put("required", JsonArray(listOf(j("text"), j("regions"))))
+                            put("additionalProperties", false)
+                        }
+                    }
+                }
+                put("required", JsonArray(listOf(j("sections"))))
+                put("additionalProperties", false)
+            }
         }
         put("required", JsonArray(listOf(j("op"))))
         put("additionalProperties", false)
@@ -437,6 +470,43 @@ class MockProvider : ModelProvider {
     override suspend fun models() = listOf(ModelChoice("fixture", "Fixture demo"))
 
     override suspend fun respond(input: List<JsonElement>, delta: (String) -> Unit): Reply {
+        if (input.any { (it as? JsonObject)?.str("content")?.startsWith("Local user setting: Explain aloud is enabled") == true }) {
+            val results = input.flatMap { item ->
+                val o = item.jsonObject
+                val text = o.str("output").ifEmpty { o.str("content") }
+                runCatching { JsonCodec.decodeFromString<List<ToolResult>>(text.substringAfterLast('\n')) }.getOrDefault(emptyList())
+            }
+            val observed = results.lastOrNull { it.status == "observed" }
+                ?.let { JsonCodec.decodeFromString<Screen>(it.content) } ?: throw SafeFailure("screen_uncertain")
+            require(observed.app == "dev.magicphone.fixture")
+            if (results.lastOrNull()?.status?.let { it.startsWith("not_dispatched_") || it == "verification_required" } == true)
+                return Reply("", listOf(Call(id(), listOf(Action(Op.OBSERVE, observed.app)))), emptyList())
+            val latest = results.lastOrNull { it.status == "observed" || (it.status == "captured" && it.content.isNotBlank()) }
+                ?.let { JsonCodec.decodeFromString<Screen>(it.content) } ?: observed
+            val table = observed.nodes.firstOrNull { it.label == "PDF comparison table" }?.bounds
+            // A keyboard transition may have hidden a large image node in the initial tree.
+            // This tree-only practice provider needs a fresh anchor before presenting marks.
+            if (table == null && results.lastOrNull()?.status != "observed")
+                return Reply("", listOf(Call(id(), listOf(Action(Op.OBSERVE, observed.app)))), emptyList())
+            fun area(top: Int, bottom: Int): List<ExplanationRegion> {
+                val b = table ?: return emptyList()
+                val c = latest.captureBounds
+                val w = c.right - c.left; val h = c.bottom - c.top
+                if (w <= 0 || h <= 0) return emptyList()
+                val left = ((b.left - c.left) * 1000 / w).coerceIn(0, 999)
+                val right = ((b.right - c.left) * 1000 / w).coerceIn(1, 1000)
+                val y = ((b.top + (b.bottom - b.top) * top / 420 - c.top) * 1000 / h).coerceIn(0, 999)
+                val y2 = ((b.top + (b.bottom - b.top) * bottom / 420 - c.top) * 1000 / h).coerceIn(1, 1000)
+                return if (left < right && y < y2) listOf(ExplanationRegion(left, y, right, y2)) else emptyList()
+            }
+            val explanation = Explanation(listOf(
+                ExplanationSection("This is the practice PDF table. The header identifies two reading methods, Method A and Method B. The figures are synthetic test data. Follow the highlighted area while I explain the comparison.", area(80, 145)),
+                ExplanationSection("The accuracy row compares eighty-four point two percent for Method A with eighty-five point five percent for Method B. In this synthetic example, Method B is higher by one point three percentage points.", area(145, 210)),
+                ExplanationSection("The time row shows twelve seconds for Method A and eight seconds for Method B. Both methods use seventy-two samples. These are only practice values, not measurements of MagicPhone or its models.", area(210, 340)),
+            ))
+            val action = Action(Op.EXPLAIN, latest.app, latest.id, explanation = explanation)
+            return Reply("", listOf(Call(id(), listOf(action))), emptyList())
+        }
         val action =
             when (step++) {
                 0 ->

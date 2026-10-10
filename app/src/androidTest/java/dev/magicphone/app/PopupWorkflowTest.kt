@@ -54,7 +54,7 @@ class PopupWorkflowTest {
         device = UiDevice.getInstance(instrumentation)
         instrumentation.getUiAutomation(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         settings = r.settings.value; archive = r.archive.value; selected = r.current.value
-        val component = "${context.packageName}/${context.packageName}.PhoneService"
+        val component = "${context.packageName}/${PhoneService::class.java.name}"
         val enabled = device.executeShellCommand("settings get secure enabled_accessibility_services").trim().split(":")
         Assert.assertTrue(component in enabled)
         if (r.phone == null) {

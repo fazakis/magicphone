@@ -30,6 +30,10 @@ class DeviceAcceptanceTest {
     private val r
         get() = context.runtime
 
+    private lateinit var savedSettings: Settings
+    private lateinit var savedArchive: Archive
+    private var selected: String? = null
+
     private fun main(block: () -> Unit) = instrumentation.runOnMainSync(block)
 
     private fun await(timeout: Long = 15000, predicate: () -> Boolean) {
@@ -48,6 +52,7 @@ class DeviceAcceptanceTest {
             android.os.Build.FINGERPRINT.contains("generic") ||
                 android.os.Build.MODEL.contains("sdk"),
         )
+        savedSettings = r.settings.value; savedArchive = r.archive.value; selected = r.current.value
         device.wakeUp()
         device.pressHome()
         main {
@@ -73,7 +78,8 @@ class DeviceAcceptanceTest {
 
     @After
     fun cleanup() {
-        main { r.stop() }
+        main { r.stop(); r.agent.clearView(); r.saveSettings(savedSettings); r.saveArchive(savedArchive); r.current.value = selected }
+        runBlocking { r.flushHistory() }
     }
 
     @Test

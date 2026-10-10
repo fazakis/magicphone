@@ -253,6 +253,7 @@ class AppRuntime(val app: Application) {
                     conversation to Sanitizer.text(question).take(8000)
                 else null
             }.distinctUntilChanged().collect { question ->
+                if (question != null) phone?.explanation?.waitForInput()
                 inputRequest.value = question?.let { InputRequest(it.first, it.second) }
             }
         }
@@ -269,6 +270,12 @@ class AppRuntime(val app: Application) {
     }
 
     private fun publishResult(state: RunState, text: String) {
+        if (state == RunState.COMPLETED && phone?.explanation?.armed == true) {
+            phone?.explanation?.presentText(text)
+            resultRequest.value = null
+            return
+        }
+        if (state == RunState.FAILED) phone?.explanation?.stop()
         if (state !in setOf(RunState.COMPLETED, RunState.FAILED) || !settings.value.showTaskResultBubbles) return
         val conversation = current.value ?: return
         if (archive.value.conversations.none { it.id == conversation }) return
@@ -359,6 +366,7 @@ class AppRuntime(val app: Application) {
         popupConversation.value = null
         phone?.workingBubble?.hide()
         phone?.quickPrompt?.cancel()
+        phone?.explanation?.stop()
         speech.stop()
         resultRequest.value = null
         catalogEpoch++
@@ -643,7 +651,7 @@ class AppRuntime(val app: Application) {
     }
 
     fun start(text: String, images: List<String> = emptyList(), secondary: Boolean = false,
-        screenContext: String = "", fromPopup: Boolean = false, onAccepted: () -> Unit = {}) {
+        screenContext: String = "", fromPopup: Boolean = false, explainAloud: Boolean = false, onAccepted: () -> Unit = {}) {
         if (text.isBlank() || submitting.value) return
         val p = settings.value.profiles.singleOrNull {
             it.id == if (secondary) settings.value.secondary else settings.value.selected
@@ -686,8 +694,18 @@ class AppRuntime(val app: Application) {
                     stop()
                     runConversation = conversation
                     if (fromPopup) popupConversation.value = conversation
+                    val guided = explainAloud && fromPopup && screenContext.isNotBlank()
+                    if (guided) phone?.explanation?.arm(screenContext) { remaining ->
+                        if (current.value == conversation && phone?.explanation?.armed == true) {
+                            resultRequest.value = null
+                            agent.start(scope, provider(p), text,
+                                archive.value.conversations.single { it.id == conversation }.messages,
+                                optimize = true, screenContext = screenContext, captureScreen = true,
+                                explainScreen = true, explanationContinuation = remaining)
+                        }
+                    }
                     agent.start(scope, provider(p), text, history, images, optimize = p.kind != ProviderKind.MOCK,
-                        screenContext = screenContext, captureScreen = fromPopup)
+                        screenContext = screenContext, captureScreen = fromPopup, explainScreen = guided)
                 }
                 onAccepted()
             } catch (e: CancellationException) { throw e

@@ -231,4 +231,17 @@
     <string name="attachment_model_unsupported">Αυτό το μοντέλο δεν διαβάζει φωτογραφίες. Επιλέξτε μοντέλο με υποστήριξη εικόνων. Το πρόχειρό σας διατηρήθηκε.</string>
     <string name="attachment_save_failed">Η απάντηση δεν αποθηκεύτηκε ή δεν παραδόθηκε. Το πρόχειρό σας διατηρήθηκε. Δοκιμάστε ξανά.</string>
     <string name="attachment_privacy">Οι φωτογραφίες αποθηκεύονται κρυπτογραφημένες στη συσκευή μαζί με τη συνομιλία. Η διαγραφή συνομιλίας αφαιρεί φωτογραφίες που δεν χρησιμοποιούνται αλλού. Τα αυτόματα στιγμιότυπα οθόνης παραμένουν προσωρινά. Τα κρυπτογραφημένα αντίγραφα περιλαμβάνουν κείμενο και αναφορές φωτογραφιών, αλλά όχι τα αρχεία τους.</string>
+    <string name="explain_aloud">Εξήγηση με φωνή και επισημάνσεις</string>
+    <string name="explain_highlights">Επισημάνσεις εξήγησης</string>
+    <string name="explain_controls">Έλεγχος φωνητικής εξήγησης</string>
+    <string name="explain_refreshing">Ενημέρωση επισημάνσεων…</string>
+    <string name="explain_finished">Η εξήγηση ολοκληρώθηκε</string>
+    <string name="explain_paused">Η εξήγηση είναι σε παύση</string>
+    <string name="explain_section">Εξήγηση · %1$d από %2$d</string>
+    <string name="explain_move">Σύρετε για μετακίνηση των χειριστηρίων</string>
+    <string name="explain_previous">Προηγούμενο μέρος εξήγησης</string>
+    <string name="explain_next">Επόμενο μέρος εξήγησης</string>
+    <string name="explain_resume">Αναπαραγωγή εξήγησης</string>
+    <string name="explain_read_only">Η φωνητική εξήγηση διαβάζει και επισημαίνει την οθόνη. Απενεργοποιήστε την για ενέργειες σε εφαρμογές.</string>
+    <string name="explain_not_enabled">Ενεργοποιήστε τη φωνητική εξήγηση στο πλαίσιο Προσβασιμότητας για να ακούσετε την εξήγηση.</string>
 </resources>

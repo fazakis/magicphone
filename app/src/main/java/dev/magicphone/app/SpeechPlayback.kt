@@ -17,7 +17,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.Locale
 
-/** Explicit local playback only. Never started by a model or automatically on completion. */
+/** Local playback after Read aloud or an explicit Explain aloud session. */
 class SpeechPlayback(private val context: Context) {
     val active = MutableStateFlow<String?>(null)
     val started = MutableStateFlow(false)
@@ -27,11 +27,18 @@ class SpeechPlayback(private val context: Context) {
     private var pending: Pair<String, String>? = null
     private var epoch = 0L
     private var engineGeneration = 0L
+    private var onStarted: (() -> Unit)? = null
+    private var onFinished: (() -> Unit)? = null
+    private var onFailed: (() -> Unit)? = null
 
     fun toggle(key: String, text: String) {
         if (active.value == key) { stop(); return }
+        play(key, text)
+    }
+    fun play(key: String, text: String, started: () -> Unit = {}, finished: () -> Unit = {}, failed: () -> Unit = {}) {
         stop()
         if (text.isBlank()) return
+        onStarted = started; onFinished = finished; onFailed = failed
         active.value = key
         pending = key to spokenText(text)
         if (ready) speakPending()
@@ -68,9 +75,16 @@ class SpeechPlayback(private val context: Context) {
             start = end
         }
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(id: String?) { handler.post { if (epoch == run && id?.startsWith("$run:") == true) started.value = true } }
+            override fun onStart(id: String?) { handler.post { if (epoch == run && id?.startsWith("$run:") == true) {
+                this@SpeechPlayback.started.value = true
+                if (id == "$run:0") onStarted?.invoke()
+            } } }
             override fun onDone(id: String?) { handler.post {
-                if (epoch == run && id == "$run:${chunks.lastIndex}") { active.value = null; started.value = false }
+                if (epoch == run && id == "$run:${chunks.lastIndex}") {
+                    active.value = null; started.value = false
+                    val done = onFinished; onFinished = null; onStarted = null; onFailed = null
+                    done?.invoke()
+                }
             } }
             @Deprecated("Platform callback")
             override fun onError(id: String?) { handler.post { if (epoch == run && id?.startsWith("$run:") == true) fail(R.string.tts_unavailable) } }
@@ -81,8 +95,8 @@ class SpeechPlayback(private val context: Context) {
                     null, "$run:$index") == TextToSpeech.ERROR) { fail(R.string.tts_unavailable); return }
         }
     }
-    private fun fail(message: Int) { stop(); Toast.makeText(context, message, Toast.LENGTH_LONG).show() }
-    fun stop() { epoch++; pending = null; active.value = null; started.value = false; engine?.stop() }
+    private fun fail(message: Int) { val failed = onFailed; stop(); Toast.makeText(context, message, Toast.LENGTH_LONG).show(); failed?.invoke() }
+    fun stop() { epoch++; pending = null; onStarted = null; onFinished = null; onFailed = null; active.value = null; started.value = false; engine?.stop() }
     fun shutdown() { engineGeneration++; stop(); ready = false; engine?.shutdown(); engine = null }
 }
 

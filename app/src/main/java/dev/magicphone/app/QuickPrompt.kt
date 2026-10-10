@@ -18,6 +18,7 @@ class QuickPrompt(private val service: PhoneService) {
     var view: View? = null
         private set
     private var draft = ""
+    private var explainAloud = false
     private var input: EditText? = null
     private var submission: Job? = null
     internal var pendingVoiceId: String? = null
@@ -52,6 +53,7 @@ class QuickPrompt(private val service: PhoneService) {
             service.startActivity(MainActivity.chatIntent(service)); return
         }
         runtime.pauseForChat()
+        service.explanation.stop()
         service.workingBubble.hide()
         service.hideInputBubble()
         val field = EditText(service).apply {
@@ -95,6 +97,12 @@ class QuickPrompt(private val service: PhoneService) {
                     setOnClickListener { beginVoice(app) }
                 }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginStart = dp(6) })
             }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(12) })
+            addView(Switch(service).apply {
+                text = service.getString(R.string.explain_aloud); contentDescription = text
+                setTextColor(0xffb8f3d1.toInt()); textSize = 14f; minHeight = dp(48)
+                isChecked = explainAloud; filterTouchesWhenObscured = true
+                setOnCheckedChangeListener { _, checked -> explainAloud = checked }
+            })
             addView(LinearLayout(service).apply {
                 addView(button(R.string.task_result_open).apply {
                     setOnClickListener {
@@ -110,6 +118,7 @@ class QuickPrompt(private val service: PhoneService) {
                             Toast.makeText(service, R.string.error_provider, Toast.LENGTH_LONG).show(); return@setOnClickListener
                         }
                         val conversation = runtime.current.value
+                        val explain = explainAloud
                         hide(); draft = ""
                         submission = runtime.scope.launch {
                             // Capture only after the prompt and keyboard leave; normal submissions
@@ -120,7 +129,7 @@ class QuickPrompt(private val service: PhoneService) {
                                 Toast.makeText(service, R.string.screen_context_changed, Toast.LENGTH_LONG).show(); return@launch
                             }
                             submission = null
-                            runtime.start(value, screenContext = app, fromPopup = true)
+                            runtime.start(value, screenContext = app, fromPopup = true, explainAloud = explain)
                             if (runtime.agent.state.value == RunState.PAUSED) runtime.agent.resume()
                         }
                     }

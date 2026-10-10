@@ -8,6 +8,7 @@ import android.widget.*
 class FixtureActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent.getBooleanExtra("explanationTable", false)) { TableFixture.show(this); return }
         intent.getStringExtra("documentMode")?.let { DocumentFixture.show(this, it); return }
         var count = savedInstanceState?.getInt("count") ?: 0
         val layout =
@@ -28,6 +29,10 @@ class FixtureActivity : Activity() {
             }
         )
         layout.addView(result)
+        if (intent.getBooleanExtra("explanationText", false)) {
+            layout.addView(TextView(this).apply { text = "E = mc²"; textSize = 36f })
+            layout.addView(TextView(this).apply { text = "Energy equals mass times the speed of light squared."; textSize = 18f })
+        }
         layout.addView(
             Button(this).apply {
                 isAllCaps = false

@@ -231,4 +231,17 @@
     <string name="attachment_model_unsupported">This model cannot read photos. Choose an image-capable model; your draft has been kept.</string>
     <string name="attachment_save_failed">Your reply could not be saved or delivered. Your draft has been kept. Please try again.</string>
     <string name="attachment_privacy">Uploaded photos are encrypted on this device and kept with their conversations. Deleting a conversation removes photos no other conversation uses. Automatic screen captures remain temporary. Encrypted backups currently include text and photo references, but not photo files.</string>
+    <string name="explain_aloud">Explain aloud with highlights</string>
+    <string name="explain_highlights">Explanation highlights</string>
+    <string name="explain_controls">Spoken explanation controls</string>
+    <string name="explain_refreshing">Updating highlights…</string>
+    <string name="explain_finished">Explanation finished</string>
+    <string name="explain_paused">Explanation paused</string>
+    <string name="explain_section">Explaining · %1$d of %2$d</string>
+    <string name="explain_move">Drag to move explanation controls</string>
+    <string name="explain_previous">Previous explanation section</string>
+    <string name="explain_next">Next explanation section</string>
+    <string name="explain_resume">Play explanation</string>
+    <string name="explain_read_only">Explain aloud reads and highlights the screen. Turn it off to perform app actions.</string>
+    <string name="explain_not_enabled">Enable Explain aloud in the Accessibility prompt to hear a guided explanation.</string>
 </resources>

@@ -258,6 +258,8 @@ fun Field(value: String, label: Int, change: (String) -> Unit, secret: Boolean =
 
 fun errorResource(code: String): Int =
     when {
+        code == "explanation_read_only" -> R.string.explain_read_only
+        code == "explanation_not_enabled" -> R.string.explain_not_enabled
         code == "attachment_limit" -> R.string.attachment_limit
         code == "images_unsupported" -> R.string.attachment_model_unsupported
         code in setOf("attachment_save_failed", "reply_not_accepted") -> R.string.attachment_save_failed
