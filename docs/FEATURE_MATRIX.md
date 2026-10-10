@@ -6,7 +6,7 @@ Latest release APK: **0.2.12**, production signed and non-debuggable, adds spoke
 
 | Requirement | Implementation | Verification / remaining check |
 |---|---|---|
-| Homepage spoken-explanation showcase | Real-device edited MP4, poster, English captions, transcript and native player | Normal-speed narration/highlights; wait shortened with disclosure; media decode, playback, responsive layout and asset checks. [Website record](WEBSITE.md#spoken-explanation-showcase-2026-10-10) |
+| Homepage spoken-explanation showcase | Real-device edited MP4, poster, English captions, transcript and native player | Normal-speed narration/highlights; wait shortened with disclosure; media decode, playback, responsive layout and asset checks. Filename-only `paper.pdf` update preserves frame count, timestamps and copied audio. [Website record](WEBSITE.md#spoken-explanation-showcase-2026-10-10) |
 | Original MIT OR Apache-2.0 source, attribution, icon, independence | LICENSE, NOTICE, vector icon, README | Source review; reference capabilities only, no implementation copied |
 | Kotlin, Compose, Material 3, coroutines; API 30+ | app/core/fixture Gradle modules | Debug/release compilation; min/target/compile SDK in manifest |
 | English/Greek, dark theme, scalable text | values + values-el, MagicTheme, scrolling panels | Resource parity; device Greek share/resources and dark UI at 1.4× text; complete Greek/OEM layout acceptance remains |
