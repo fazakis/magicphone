@@ -10,6 +10,7 @@ import android.os.SystemClock
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Configurator
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import dev.magicphone.core.*
@@ -30,7 +31,7 @@ class ConversationAttachmentTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val r get() = context.runtime
-    private val device = UiDevice.getInstance(instrumentation)
+    private lateinit var device: UiDevice
     private lateinit var settings: Settings
     private lateinit var archive: Archive
     private var current: String? = null
@@ -48,6 +49,9 @@ class ConversationAttachmentTest {
 
     @Before fun setup() {
         Assert.assertTrue(android.os.Build.FINGERPRINT.contains("generic") || android.os.Build.MODEL.contains("sdk"))
+        Configurator.getInstance().setUiAutomationFlags(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+        device = UiDevice.getInstance(instrumentation)
+        instrumentation.getUiAutomation(android.app.UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
         main {
             r.stop(); r.notice.value = ""; settings = r.settings.value; archive = r.archive.value; current = r.current.value
             r.saveSettings(settings.copy(onboarded = true, policy = PolicyConfig(), showTaskResultBubbles = false))
@@ -90,6 +94,82 @@ class ConversationAttachmentTest {
         await { accepted && !r.submitting.value }
     }
     private fun done(timeout: Long = 20000) = await(timeout) { r.agent.state.value == RunState.COMPLETED }
+
+    @Test fun pdfPickerPreviewFollowupBranchAndConversationIsolation() {
+        val values = android.content.ContentValues().apply {
+            put(android.provider.MediaStore.Downloads.DISPLAY_NAME, "MagicPhone-QA-context.pdf")
+            put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/pdf")
+        }
+        val uri = context.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)!!
+        context.contentResolver.openOutputStream(uri)!!.use { it.write(syntheticPaper()) }
+        try {
+            SyntheticServer { Action(Op.COMPLETE, text = "Synthetic paper received") }.use { server ->
+                configure(server); main { r.newConversation() }
+                val original = r.current.value!!
+                context.startActivity(MainActivity.chatIntent(context, original))
+                device.wait(Until.findObject(By.desc(context.getString(R.string.attach))), 5000).click()
+                var entry = device.wait(Until.findObject(By.text("MagicPhone-QA-context.pdf")), 5000)
+                if (entry == null) {
+                    device.findObject(By.desc("Show roots"))?.click()
+                    device.wait(Until.findObject(By.text("Downloads")), 3000)?.click()
+                    entry = device.wait(Until.findObject(By.text("MagicPhone-QA-context.pdf")), 5000)
+                }
+                Assert.assertNotNull("PDF is selectable in the all-file picker", entry); entry.click()
+                Assert.assertTrue(device.wait(Until.hasObject(By.text("MagicPhone-QA-context.pdf").pkg(context.packageName)), 10000))
+                val start = device.wait(Until.findObject(By.text(context.getString(R.string.start)).pkg(context.packageName)), 5000)
+                await { device.findObject(By.text(context.getString(R.string.start)))?.isEnabled == true }
+                start.click(); done(); flush()
+                val message = r.archive.value.conversations.single { it.id == original }.messages.first()
+                val ref = message.attachments.single()
+                Assert.assertEquals(2, ref.pages)
+                if (android.os.Build.VERSION.SDK_INT >= 35) Assert.assertTrue(server.requests.last().contains("Orion"))
+                Assert.assertTrue(server.requests.last().contains(ref.id))
+                Assert.assertTrue(server.requests.last().contains("input_image") || server.requests.last().contains("image_url"))
+                main { repeat(30) { r.addMessage("user", "Intervening synthetic step $it") } }
+                submit("Use the earlier paper to explain how the samples were paired"); done()
+                if (android.os.Build.VERSION.SDK_INT >= 35) Assert.assertTrue(server.requests.last().contains("paired"))
+                Assert.assertTrue(server.requests.last().contains(ref.id))
+                main { r.branch(original, message.id) }
+                val branch = r.current.value!!
+                submit("Use the paper in this branch"); done()
+                if (android.os.Build.VERSION.SDK_INT >= 35) Assert.assertTrue(server.requests.last().contains("Orion"))
+                Assert.assertTrue(server.requests.last().contains(ref.id))
+                context.startActivity(MainActivity.chatIntent(context, branch)); device.waitForIdle()
+                repeat(5) { device.findObject(By.scrollable(true))?.scroll(androidx.test.uiautomator.Direction.UP, 1f) }
+                device.wait(Until.findObject(By.text(ref.name)), 5000).click()
+                Assert.assertTrue(device.wait(Until.hasObject(By.text("1 / 2")), 5000))
+                device.findObject(By.text("›")).click()
+                Assert.assertTrue(device.wait(Until.hasObject(By.text("2 / 2")), 5000))
+                device.takeScreenshot(java.io.File(context.getExternalFilesDir(null), "retained-pdf-preview.png")); device.pressBack()
+                main { r.newConversation() }
+                submit("Complete with done. No document is attached in this new chat."); done()
+                Assert.assertFalse(server.requests.last().contains("Orion"))
+                main { r.deleteConversation(original) }; flush(); Assert.assertNotNull(r.attachments.load(ref))
+                main { r.deleteConversation(branch) }; flush(); Assert.assertNull(r.attachments.load(ref))
+            }
+        } finally { context.contentResolver.delete(uri, null, null) }
+    }
+
+    @Test fun documentSentAsWaitingReplyReachesModelAndSurvivesReload() {
+        var calls = 0
+        SyntheticServer { if (calls++ == 0) Action(Op.ASK, text = "Attach the methodology") else Action(Op.COMPLETE, text = "Read context") }.use { server ->
+            configure(server)
+            main {
+                r.saveSettings(r.settings.value.copy(profiles = r.settings.value.profiles.map { if (it.id == r.settings.value.selected) it.copy(images = false) else it }))
+                r.newConversation()
+            }
+            submit("Read the experiment"); await { r.agent.state.value == RunState.WAITING_USER }
+            val file = r.documents.prepare("methodology.txt", "text/plain", "Orion and Lyra use 72 paired synthetic samples.".toByteArray())
+            var accepted = false
+            main { r.start("Here is the context", files = listOf(file), onAccepted = { accepted = true }) }
+            await { accepted }; done(); flush()
+            Assert.assertTrue(server.requests.last().contains("72 paired synthetic samples"))
+            val ref = r.archive.value.conversations.single { it.id == r.current.value }.messages.last { it.role == "user" }.attachments.single()
+            Assert.assertNotNull(AttachmentStore(Vault(context)).load(ref))
+            submit("Recall the methodology again"); done()
+            Assert.assertTrue(server.requests.last().contains("72 paired synthetic samples"))
+        }
+    }
 
     @Test fun followupBranchThumbnailAndDeletion() {
         val image = image()
@@ -204,6 +284,38 @@ class ConversationAttachmentTest {
             r.vault.write("attachment-restart-test", r.current.value!!)
             keepForRestart = true
         }
+    }
+
+    @Test fun prepareDocumentRestart() {
+        Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("documentRestart") == "true")
+        SyntheticServer { Action(Op.COMPLETE, text = "Synthetic document retained") }.use { server ->
+            configure(server); main { r.newConversation() }
+            val file = r.documents.prepare("restart-paper.pdf", "application/pdf", syntheticPaper())
+            var accepted = false
+            main { r.start("Read this synthetic paper", files = listOf(file), onAccepted = { accepted = true }) }
+            await { accepted }; done(); flush()
+            r.vault.write("document-restart-test", r.current.value!!)
+            keepForRestart = true
+        }
+    }
+
+    @Test fun verifyDocumentRestart() {
+        Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("documentRestart") == "true")
+        val conversation = r.vault.read("document-restart-test") ?: error("Prepare first, then force-stop")
+        val saved = r.archive.value.conversations.single { it.id == conversation }
+        Assert.assertEquals("restart-paper.pdf", saved.messages.first().attachments.single().name)
+        SyntheticServer { Action(Op.COMPLETE, text = "Document survived restart") }.use { server ->
+            configure(server); main { r.selectConversation(conversation) }
+            submit("Use the earlier paper without attaching it again"); done()
+            Assert.assertTrue(server.requests.last().contains(saved.messages.first().attachments.single().id))
+            if (android.os.Build.VERSION.SDK_INT >= 35) {
+                Assert.assertTrue(server.requests.last().contains("Orion"))
+                Assert.assertTrue(server.requests.last().contains("paired"))
+            }
+        }
+        archive = archive.copy(conversations = archive.conversations.filterNot { it.id == conversation })
+        current = archive.conversations.maxByOrNull { it.updated }?.id
+        r.vault.delete("document-restart-test")
     }
 
     @Test fun verifyProcessRestart() {

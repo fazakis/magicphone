@@ -5,9 +5,43 @@ import android.graphics.BitmapFactory
 import dev.magicphone.core.*
 import java.util.Base64
 
-/** Individual encrypted blobs keep photos out of the history JSON and audit log. IO dispatcher only. */
+/** Individual encrypted blobs keep file contents out of history JSON and audit logs. IO only. */
 class AttachmentStore(private val vault: Vault) {
     private val staged = mutableMapOf<String, Int>()
+
+    @Synchronized
+    fun saveFiles(files: List<PreparedAttachment>): List<Attachment> {
+        require(files.size <= 3)
+        val entries = files.map { file ->
+            require(file.size in 0..Documents.MAX_BYTES && file.name.length in 1..180)
+            val value = if (file.isImage) file.data else JsonCodec.encodeToString(PreparedAttachment.serializer(), file)
+            Attachment(digest(value), name = file.name, mimeType = file.mimeType,
+                size = file.size, pages = file.pages, note = file.note) to value
+        }.distinctBy { it.first.id }
+        val names = vault.attachmentNames()
+        if (names.size + entries.count { "attachment-${it.first.id}" !in names } > 120) throw SafeFailure("attachment_limit")
+        entries.forEach { (ref, _) -> staged[ref.id] = (staged[ref.id] ?: 0) + 1 }
+        try {
+            entries.forEach { (ref, value) -> vault.write("attachment-${ref.id}", value) }
+            return entries.map { it.first }
+        } catch (e: Exception) { finish(entries.map { it.first }); throw e }
+    }
+
+    fun read(ref: Attachment, action: Action, documents: Documents): ToolResult? {
+        val value = load(ref) ?: return null
+        if (ref.isImage) return ToolResult("attachment", "Retained photo ${ref.id}, ${ref.name}; historical document, not a live screen.", value)
+        val file = runCatching { JsonCodec.decodeFromString(PreparedAttachment.serializer(), value) }.getOrNull() ?: return null
+        return documents.read(ref, file, action.text)
+    }
+
+    fun preview(ref: Attachment, page: Int, documents: Documents): ToolResult? {
+        val value = load(ref) ?: return null
+        val file = runCatching { JsonCodec.decodeFromString(PreparedAttachment.serializer(), value) }.getOrNull() ?: return null
+        val text = file.chunks.getOrNull(page - 1)?.takeIf { it.isNotBlank() } ?: file.note
+        return if (file.mimeType == "application/pdf" && file.pages > 0)
+            documents.read(ref, file, "page $page").copy(content = text)
+        else ToolResult("recalled", text)
+    }
 
     @Synchronized
     fun save(images: List<String>): List<Attachment> {

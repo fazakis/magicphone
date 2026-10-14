@@ -166,7 +166,7 @@ class MainActivity : ComponentActivity() {
                 ?.take(8000)
                 .orEmpty()
         sharedUri =
-            if (intent.action == Intent.ACTION_SEND && intent.type?.startsWith("image/") == true) {
+            if (intent.action == Intent.ACTION_SEND) {
                 @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
             } else null
     }
@@ -261,6 +261,9 @@ fun errorResource(code: String): Int =
         code == "explanation_read_only" -> R.string.explain_read_only
         code == "explanation_not_enabled" -> R.string.explain_not_enabled
         code == "attachment_limit" -> R.string.attachment_limit
+        code == "file_too_large" -> R.string.file_too_large
+        code == "file_count_limit" -> R.string.file_count_limit
+        code == "file_unreadable" -> R.string.file_unreadable
         code == "images_unsupported" -> R.string.attachment_model_unsupported
         code in setOf("attachment_save_failed", "reply_not_accepted") -> R.string.attachment_save_failed
         code == "conversation_changed" -> R.string.voice_chat_changed
@@ -345,7 +348,7 @@ fun AppUi(r: AppRuntime, focusRequest: Long, shared: String, uri: Uri?, consumed
         onDispose { lifecycle.removeObserver(observer); r.visibleChat.value = null }
     }
     val draft = rememberSaveable(current) { mutableStateOf("") }
-    var images by remember(current) { mutableStateOf<List<String>>(emptyList()) }
+    var files by remember(current) { mutableStateOf<List<PreparedAttachment>>(emptyList()) }
     val activity = androidx.activity.compose.LocalActivity.current as MainActivity
     LaunchedEffect(focusRequest) { if (focusRequest > 0) tab = 0 }
     LaunchedEffect(shared, uri) {
@@ -354,12 +357,15 @@ fun AppUi(r: AppRuntime, focusRequest: Long, shared: String, uri: Uri?, consumed
             tab = 0
         }
         if (uri != null) {
-            runCatching { withContext(Dispatchers.IO) { activity.image(uri) } }
+            val expected = r.current.value
+            runCatching { withContext(Dispatchers.IO) { r.documents.import(uri) } }
                 .onSuccess {
-                    images = (images + it).take(3)
+                    if (r.current.value == expected) {
+                        if (files.size >= 3) r.notice.value = "file_count_limit" else files = files + it
+                    }
                     tab = 0
                 }
-                .onFailure { r.notice.value = "image_invalid" }
+                .onFailure { r.notice.value = (it as? SafeFailure)?.code ?: "file_unreadable" }
         }
         consumed()
     }
@@ -449,7 +455,7 @@ fun AppUi(r: AppRuntime, focusRequest: Long, shared: String, uri: Uri?, consumed
         Box(Modifier.padding(padding).consumeWindowInsets(padding).imePadding()
             .fillMaxSize().padding(horizontal = 20.dp)) {
             when (tab) {
-                0 -> TaskPage(r, draft, images, { images = it }, focusRequest)
+                0 -> TaskPage(r, draft, files, { files = it }, focusRequest)
                 1 -> HistoryPage(r) { tab = 0 }
                 2 -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(14.dp)) { LibraryPage(r) }
@@ -486,8 +492,8 @@ fun AppUi(r: AppRuntime, focusRequest: Long, shared: String, uri: Uri?, consumed
 fun TaskPage(
     r: AppRuntime,
     draft: MutableState<String>,
-    images: List<String>,
-    setImages: (List<String>) -> Unit,
+    files: List<PreparedAttachment>,
+    setFiles: (List<PreparedAttachment>) -> Unit,
     focusRequest: Long,
 ) {
     val data by r.archive.collectAsStateWithLifecycle()
@@ -542,7 +548,7 @@ fun TaskPage(
                         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (msg.role != "user") Text("MagicPhone", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                             SelectionContainer { Text(msg.text, style = MaterialTheme.typography.bodyLarge) }
-                            msg.attachments.forEach { photo -> AttachmentPhoto(r, photo) }
+                            msg.attachments.forEach { photo -> AttachmentCard(r, photo) }
                             if (msg.role == "assistant" && msg.text.isNotBlank()) ReadAloudButton(r, msg.id, msg.text)
                         }
                     }
@@ -585,16 +591,18 @@ fun TaskPage(
                         metrics.modelMs / 1000.0, metrics.toolMs / 1000.0))
             }
         }
-        TaskComposer(r, draft, images, setImages, focusRequest)
+        TaskComposer(r, draft, files, setFiles, focusRequest)
     }
 }
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun TaskComposer(r: AppRuntime, draft: MutableState<String>, images: List<String>,
-    setImages: (List<String>) -> Unit, focusRequest: Long) {
+private fun TaskComposer(r: AppRuntime, draft: MutableState<String>, files: List<PreparedAttachment>,
+    setFiles: (List<PreparedAttachment>) -> Unit, focusRequest: Long) {
     val submitting by r.submitting.collectAsStateWithLifecycle()
-    val latestImages by rememberUpdatedState(images)
+    val latestFiles by rememberUpdatedState(files)
+    var importing by remember { mutableStateOf(false) }
+    var pickerConversation by remember { mutableStateOf<String?>(null) }
     val state by r.agent.state.collectAsStateWithLifecycle()
     val settings by r.settings.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
@@ -636,20 +644,36 @@ private fun TaskComposer(r: AppRuntime, draft: MutableState<String>, images: Lis
             } else r.notice.value = "voice_chat_changed"
         }
     }
-    val picker =
-        rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri != null)
-                scope.launch {
-                    runCatching { withContext(Dispatchers.IO) { activity.image(uri) } }
-                        .onSuccess { setImages((images + it).take(3)) }
-                        .onFailure { r.notice.value = "image_invalid" }
-                }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            importing = true
+            try {
+                val file = withContext(Dispatchers.IO) { r.documents.import(uri) }
+                if (r.current.value == pickerConversation) {
+                    if (latestFiles.size >= 3) r.notice.value = "file_count_limit"
+                    else setFiles(latestFiles + file)
+                } else r.notice.value = "voice_chat_changed"
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                r.notice.value = (e as? SafeFailure)?.code ?: "file_unreadable"
+            } finally { importing = false }
         }
+    }
     Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
         Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            if (images.isNotEmpty()) TextButton({ setImages(emptyList()) }) {
-                Text("${s(R.string.remove_image)} (${images.size})")
+            if (importing) LinearProgressIndicator(Modifier.fillMaxWidth())
+            files.forEachIndexed { index, file ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
+                        Text("${(file.size / 1024).coerceAtLeast(1)} KB" + if (file.pages > 0) " · ${file.pages} ${s(R.string.document_pages)}" else "",
+                            style = MaterialTheme.typography.labelSmall)
+                        if (!file.isImage && file.pages == 0 && file.chunks.isEmpty())
+                            Text(s(R.string.file_stored_only), style = MaterialTheme.typography.labelSmall)
+                    }
+                    TextButton({ setFiles(files.filterIndexed { i, _ -> i != index }) }) { Text(s(R.string.remove_file)) }
+                }
             }
             OutlinedTextField(
                 draft.value, { draft.value = it },
@@ -674,20 +698,20 @@ private fun TaskComposer(r: AppRuntime, draft: MutableState<String>, images: Lis
                 },
             )
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton({ picker.launch("image/*") }) { AppIcon(R.drawable.ic_attach, description = s(R.string.attach)) }
+                IconButton({ pickerConversation = r.current.value; picker.launch(arrayOf("*/*")) }, enabled = !importing && !submitting) { AppIcon(R.drawable.ic_attach, description = s(R.string.attach)) }
                 val selected = settings.profiles.find { it.id == settings.selected }
                 Text(selected?.modelLabel().orEmpty().ifBlank { s(R.string.choose_model) },
                     Modifier.weight(1f).padding(end = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button({
-                    val submittedText = draft.value
-                    val submittedImages = images
-                    r.start(submittedText, submittedImages, secondary, onAccepted = {
+                    val submittedText = draft.value.ifBlank { activity.getString(R.string.read_attached_files) }
+                    val submittedFiles = files
+                    r.start(submittedText, secondary = secondary, files = submittedFiles, onAccepted = {
                         if (draft.value == submittedText) draft.value = ""
-                        if (latestImages == submittedImages) setImages(emptyList())
+                        if (latestFiles == submittedFiles) setFiles(emptyList())
                     })
                 },
-                    enabled = draft.value.isNotBlank() && !submitting, contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)) {
+                    enabled = (draft.value.isNotBlank() || files.isNotEmpty()) && !submitting && !importing, contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp)) {
                     Text(s(if (state in setOf(RunState.WAITING_USER, RunState.ACTING, RunState.PLANNING,
                         RunState.PAUSED, RunState.WAITING_APPROVAL)) R.string.send else R.string.start))
                     Spacer(Modifier.width(6.dp))

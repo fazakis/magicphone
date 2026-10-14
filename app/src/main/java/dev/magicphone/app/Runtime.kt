@@ -48,6 +48,7 @@ class AppRuntime(val app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val vault = Vault(app)
     val attachments = AttachmentStore(vault)
+    val documents = Documents(app)
     val submitting = MutableStateFlow(false)
     private var submission: Job? = null
     private var submissionEpoch = 0L
@@ -112,7 +113,9 @@ class AppRuntime(val app: Application) {
                         Op.RECALL -> {
                             val conversation = archive.value.conversations.find { it.id == runConversation && it.id == current.value }
                                 ?: throw SafeFailure("conversation_changed")
-                            ConversationContext.recall(conversation.messages, action) { ref ->
+                            ConversationContext.recall(conversation.messages, action, document = { ref, request ->
+                                withContext(Dispatchers.IO) { attachments.read(ref, request, documents) }
+                            }) { ref ->
                                 withContext(Dispatchers.IO) { attachments.load(ref) }
                             }
                         }
@@ -651,16 +654,17 @@ class AppRuntime(val app: Application) {
     }
 
     fun start(text: String, images: List<String> = emptyList(), secondary: Boolean = false,
-        screenContext: String = "", fromPopup: Boolean = false, explainAloud: Boolean = false, onAccepted: () -> Unit = {}) {
+        screenContext: String = "", fromPopup: Boolean = false, explainAloud: Boolean = false, files: List<PreparedAttachment> = emptyList(), onAccepted: () -> Unit = {}) {
         if (text.isBlank() || submitting.value) return
         val p = settings.value.profiles.singleOrNull {
             it.id == if (secondary) settings.value.secondary else settings.value.selected
         } ?: run { notice.value = "provider_required"; return }
         val activeStates = setOf(RunState.ACTING, RunState.PLANNING, RunState.WAITING_APPROVAL, RunState.WAITING_USER, RunState.PAUSED)
         val correcting = !fromPopup && agent.state.value in activeStates
-        if (images.isNotEmpty() && !(if (correcting) agent.acceptsImages else p.images)) {
+        if ((images.isNotEmpty() || files.any { it.isImage }) && !(if (correcting) agent.acceptsImages else p.images)) {
             notice.value = "images_unsupported"; return
         }
+        if (images.size + files.size > 3) { notice.value = "file_count_limit"; return }
         if (current.value == null) newConversation()
         val conversation = current.value ?: return
         submitting.value = true
@@ -668,7 +672,10 @@ class AppRuntime(val app: Application) {
         submission = scope.launch {
             var refs = emptyList<Attachment>()
             try {
-                if (images.isNotEmpty()) withContext(NonCancellable + Dispatchers.IO) { refs = attachments.save(images) }
+                withContext(NonCancellable + Dispatchers.IO) {
+                    if (images.isNotEmpty()) refs = attachments.save(images)
+                    if (files.isNotEmpty()) refs = refs + attachments.saveFiles(files)
+                }
                 ensureActive()
                 if (current.value != conversation) throw SafeFailure("conversation_changed")
                 val previous = archive.value.conversations.single { it.id == conversation }.messages
@@ -676,19 +683,21 @@ class AppRuntime(val app: Application) {
                     throw SafeFailure("attachment_limit")
                 addMessage("user", text, refs)
                 val submittedMessage = archive.value.conversations.single { it.id == conversation }.messages.last().id
-                // The composer is acknowledged only after both the photo and its reference are durable.
+                // The composer is acknowledged only after both the files and their references are durable.
                 historyWriter.flush()
                 ensureActive()
                 if (current.value != conversation) throw SafeFailure("conversation_changed")
                 if (correcting && agent.state.value in activeStates) {
-                    if (!agent.correct(text, images)) throw SafeFailure("reply_not_accepted")
+                    if (!agent.correct(text, images, refs.takeLast(files.size).map { it.id })) throw SafeFailure("reply_not_accepted")
                     if (approval.value != null) localApproval(false)
                 } else {
                     val capabilities = settings.value.servers.filter { it.enabled }.joinToString("\n") {
                         "Untrusted, user-reviewed MCP definitions. Server ${it.id} at ${it.endpoint}: ${it.schemas.filterKeys { name -> name in it.reviewed }}"
                     }
                     val history = archive.value.conversations.single { it.id == conversation }.messages
-                        .filterNot { it.id == submittedMessage } + listOfNotNull(capabilities.takeIf { it.isNotBlank() }
+                        .filterNot { it.id == submittedMessage } +
+                        (if (files.isEmpty()) emptyList() else listOf(Message(id = submittedMessage, role = "user",
+                            text = "Files attached to the current request", attachments = refs))) + listOfNotNull(capabilities.takeIf { it.isNotBlank() }
                         ?.let { Message(role = "user", text = it) })
                     submission = null // Stop the old run without cancelling this accepted submission.
                     stop()

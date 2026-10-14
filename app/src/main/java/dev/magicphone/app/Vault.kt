@@ -47,7 +47,7 @@ class Vault(context: Context) {
         val f = file(name)
         if (!f.baseFile.exists() && !File(f.baseFile.path + ".bak").exists()) return null
         val b = f.readFully()
-        require(b.size in 29..(5 * 1024 * 1024) && b[0] == 1.toByte())
+        require(b.size in 29..(limit(name) + 29) && b[0] == 1.toByte())
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, b.copyOfRange(1, 13)))
         cipher.updateAAD(name.toByteArray())
@@ -56,7 +56,7 @@ class Vault(context: Context) {
 
     @Synchronized
     fun write(name: String, value: String) {
-        require(value.toByteArray().size <= 4 * 1024 * 1024)
+        require(value.toByteArray().size <= limit(name))
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         cipher.updateAAD(name.toByteArray())
@@ -76,6 +76,8 @@ class Vault(context: Context) {
     fun delete(name: String) {
         file(name).delete()
     }
+
+    private fun limit(name: String) = if (name.startsWith("attachment-")) 16 * 1024 * 1024 else 4 * 1024 * 1024
 
     @Synchronized
     fun attachmentNames(): Set<String> = root.listFiles().orEmpty().map { it.name }

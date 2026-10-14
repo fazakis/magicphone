@@ -240,6 +240,43 @@ class GuidedExplanationTest {
         println("Live fixture explanation verified: modelCalls=$calls; sections=${guide.plan!!.sections.size}; regions=${guide.plan!!.sections.sumOf { it.regions.size }}")
     }
 
+    @Test fun liveUploadedPaperCombinesWithLaterPopupScreenExplanation() {
+        Assume.assumeTrue("Account owner opted in", InstrumentationRegistry.getArguments().getString("liveChatGpt") == "true")
+        val profile = savedSettings.profiles.firstOrNull { it.id == savedSettings.selected && it.kind == ProviderKind.CHATGPT }
+            ?: savedSettings.profiles.single { it.kind == ProviderKind.CHATGPT }
+        val file = r.documents.prepare("synthetic-methodology.pdf", "application/pdf", syntheticPaper())
+        main {
+            r.saveSettings(savedSettings.copy(selected = profile.id, onboarded = true,
+                policy = PolicyConfig(apps = mapOf(pkg to AppRule(observe = true)))))
+            r.start("Read both pages of this synthetic research paper for context. COMPLETE with a brief acknowledgement; do not explain the on-screen table yet.", files = listOf(file))
+        }
+        await("Uploaded PDF processed by live model", 180000) { r.agent.state.value in setOf(RunState.COMPLETED, RunState.FAILED) }
+        Assert.assertEquals(r.agent.error.value, RunState.COMPLETED, r.agent.state.value)
+        val conversation = r.current.value
+        // Remove the model's acknowledgement so only the retained PDF can supply the hidden definitions.
+        main {
+            val c = r.archive.value.conversations.single { it.id == conversation }
+            r.saveArchive(r.archive.value.copy(conversations = r.archive.value.conversations.map { if (it.id == conversation) c.copy(messages = c.messages.filter { it.role == "user" }) else it }))
+            r.phone!!.quickPrompt.show()
+        }
+        device.wait(Until.findObject(By.clazz("android.widget.EditText").pkg(context.packageName)), 5000).text =
+            "Explain this visible results table aloud in English using the paper I attached earlier in this conversation. Name the methods behind A and B, compare the accuracies and times, and explain the evaluation setup and its limitations. Highlight the relevant visible values in short spoken phrases. Do not navigate."
+        val toggle = device.findObject(By.desc(text(R.string.explain_aloud)))
+        if (!toggle.isChecked) toggle.click()
+        device.findObject(By.text(text(R.string.send))).click()
+        await("Retained paper plus fresh screen produces speech", 180000) { guide.plan != null || r.agent.state.value in setOf(RunState.FAILED, RunState.WAITING_USER) }
+        Assert.assertNotNull("state=${r.agent.state.value}, error=${r.agent.error.value}", guide.plan)
+        val transcript = guide.plan!!.transcript
+        Assert.assertTrue("Hidden method names came from retained PDF", transcript.contains("Orion", true) && transcript.contains("Lyra", true))
+        Assert.assertTrue("Values came from current screen", transcript.contains("84.2") || transcript.contains("eighty-four", true))
+        Assert.assertTrue("Model returned visible emphasis", guide.plan!!.sections.any { it.regions.isNotEmpty() })
+        Assert.assertEquals(conversation, r.current.value)
+        await("Speech began", 20000) { r.speech.started.value }
+        capture("live-retained-paper-screen")
+        File(dir, "live-retained-paper-transcript.txt").writeText(transcript)
+        println("Retained PDF and live screen combined: ${guide.plan!!.sections.size} spoken sections")
+    }
+
     private fun region(screen: Screen, label: String, style: String): ExplanationRegion {
         val b = screen.nodes.single { it.label == label }.bounds
         val c = screen.captureBounds

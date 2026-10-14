@@ -55,7 +55,17 @@ data class Message(
 )
 
 @Serializable
-data class Attachment(val id: String, val available: Boolean = true)
+data class Attachment(
+    val id: String,
+    val available: Boolean = true,
+    val name: String = "Photo",
+    val mimeType: String = "image/jpeg",
+    val size: Long = 0,
+    val pages: Int = 0,
+    val note: String = "",
+) {
+    val isImage: Boolean get() = mimeType.startsWith("image/")
+}
 
 @Serializable
 data class Audit(
@@ -132,6 +142,9 @@ object Archives {
                 )
                 require(it.attachments.size <= 3 && it.attachments.map { a -> a.id }.distinct().size == it.attachments.size)
                 require(it.attachments.all { a -> a.id.matches(Regex("[a-f0-9]{64}")) })
+                require(it.attachments.all { a -> a.name.length in 1..180 && a.name.none(Char::isISOControl) &&
+                    a.mimeType.matches(Regex("[a-zA-Z0-9.+_-]+/[a-zA-Z0-9.+_-]+")) &&
+                    a.size in 0..10_485_760 && a.pages in 0..100_000 && a.note.length <= 300 })
             }
             require(c.messages.flatMap { it.attachments }.distinctBy { it.id }.size <= 60)
         }

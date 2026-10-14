@@ -123,4 +123,57 @@ class ConversationContextTest {
         for (secret in listOf("hunter2", "123456\n", "4111111111111111")) assertFalse(safe.contains(secret))
         assertFalse(Sanitizer.text(original).contains("00001234567890123"))
     }
+
+    @Test fun documentRecallIsConversationScopedAndAcceptsPageQuery() = runTest {
+        val file = Attachment("b".repeat(64), name = "paper.pdf", mimeType = "application/pdf", pages = 9)
+        val messages = listOf(Message(role = "user", text = "Background paper", attachments = listOf(file)))
+        val action = Action(Op.RECALL, node = file.id, text = "page 7")
+        var reads = 0
+        val reader: suspend (Attachment, Action) -> ToolResult? = { ref, request ->
+            reads++; assertEquals(file, ref); assertEquals("page 7", request.text)
+            ToolResult("attachment", "Page 7: units are milliseconds", image)
+        }
+        assertTrue(ConversationContext.recall(messages, action, reader) { error("Not a photo") }.content.contains("milliseconds"))
+        ConversationContext.recall(emptyList(), action, reader) { error("Cross-conversation load") }
+        ConversationContext.recall(listOf(messages.single().copy(attachments = listOf(file.copy(available = false)))), action, reader) { error("Imported file load") }
+        assertEquals(1, reads)
+    }
+
+    @Test fun textOnlyModelReceivesRetainedDocumentAndWaitingReply() = runTest {
+        val file = Attachment("c".repeat(64), name = "results.csv", mimeType = "text/csv")
+        var requested = 0
+        val gateway = Gateway(Policy("own.app"), { PolicyConfig() }, object : DevicePort {
+            override suspend fun inspect(app: String) = error("Not a screen read")
+            override suspend fun execute(action: Action, screen: Screen): ToolResult {
+                if (action.op == Op.RECALL) { requested++; assertEquals(file.id, action.node); return ToolResult("recalled", "Retained CSV: Lyra calibration uses 72 paired samples.") }
+                return ToolResult("reported")
+            }
+        }, object : ApprovalPort { override suspend fun request(approval: Approval) = error("No approvals") })
+        var calls = 0
+        val provider = object : ModelProvider {
+            override val supportsImages = false
+            override suspend fun models() = emptyList<ModelChoice>()
+            override suspend fun respond(input: List<JsonElement>, delta: (String) -> Unit): Reply {
+                assertTrue(input.toString().contains("72 paired samples"))
+                return Reply("", listOf(Call(id(), listOf(if (calls++ == 0) Action(Op.ASK, text = "Send more context") else Action(Op.COMPLETE, text = "Combined")))), emptyList())
+            }
+        }
+        val agent = Agent(gateway, { _, _ -> })
+        agent.start(backgroundScope, provider, "Explain the data", listOf(Message(role = "user", text = "Results", attachments = listOf(file))))
+        runCurrent(); assertEquals(RunState.WAITING_USER, agent.state.value)
+        assertTrue(agent.correct("More context", attachments = listOf(file.id)))
+        runCurrent(); assertEquals(RunState.COMPLETED, agent.state.value)
+        assertEquals(2, requested)
+    }
+
+    @Test fun fileMetadataRoundTripsAndContextSeparatesDocumentsFromLiveCoordinates() {
+        val file = Attachment("d".repeat(64), name = "paper.pdf", mimeType = "application/pdf", size = 9000, pages = 12)
+        val messages = listOf(Message(role = "user", text = "Remember this paper", attachments = listOf(file)))
+        val encoded = JsonCodec.encodeToString(Archive.serializer(), Archive(conversations = listOf(Conversation(title = "Paper", messages = messages))))
+        assertEquals(file, Archives.read(encoded.toByteArray()).conversations.single().messages.single().attachments.single())
+        val context = ConversationContext.build(messages, "Explain the table on screen").toString()
+        assertTrue(context.contains("paper.pdf")); assertTrue(context.contains("page 4"))
+        assertTrue(context.contains("ONLY the latest live screenshot for highlight coordinates"))
+        assertFalse(context.contains("base64"))
+    }
 }
