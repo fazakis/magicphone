@@ -98,7 +98,9 @@ class PhoneService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        explanation.stop()
+        // Android is interrupting feedback, not cancelling the user's explanation.
+        // Preserve its position and offer Resume when the underlying app is visible again.
+        explanation.interrupt(requireResume = true)
         runtime.localApproval(false)
         runtime.agent.pause()
     }

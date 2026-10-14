@@ -216,6 +216,12 @@ class VoiceAndControlsTest {
             Assert.assertNotNull("System accessibility button", shortcut)
             shortcut.click()
             Assert.assertTrue(device.wait(Until.hasObject(By.text(context.getString(R.string.quick_prompt_title))), 10000))
+            // This case returns through an empty popup. Earlier popup/voice cases can leave
+            // a retained popup draft, which Open chat intentionally transfers to the composer.
+            val popupInput = input()
+            Assert.assertNotNull("Popup input", popupInput)
+            println("Background-return fixture: prior popup draft present=${popupInput.text.isNotBlank()}")
+            popupInput.text = ""
             device.findObject(By.text(context.getString(R.string.task_result_open))).click()
             await("Current draft focused from background") { input()?.text == "Keep my correction" && input()?.isFocused == true }
             Assert.assertTrue("Keyboard visible", device.wait(Until.hasObject(By.pkg("com.google.android.inputmethod.latin")), 5000))

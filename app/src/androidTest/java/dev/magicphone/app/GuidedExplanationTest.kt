@@ -161,6 +161,87 @@ class GuidedExplanationTest {
         SystemClock.sleep(1300)
         Assert.assertFalse(guide.armed); Assert.assertNull(guide.controls); Assert.assertNull(r.speech.active.value)
     }
+    @Test fun foreignPopupDismissalRestoresExplanationWithoutResubmitting() {
+        val foreign = "dev.magicphone.windowfixture"
+        Assume.assumeTrue("Install the isolated window fixture", device.executeShellCommand("pm path $foreign").startsWith("package:"))
+        start()
+        val chat = r.current.value
+        val source = guide.sourceSnapshot
+        val originalPlan = guide.plan
+        val messages = r.archive.value.conversations.single { it.id == chat }.messages.count { it.role == "user" }
+        try {
+            device.executeShellCommand("am start -W -n $foreign/.WindowActivity --ei left 80 --ei top 200 --ei width 750 --ei height 450")
+            Assert.assertTrue(device.wait(Until.hasObject(By.text("FOREIGN FIXTURE CONTENT")), 5000))
+            await("Popup suspends speech and hides player without losing plan") {
+                guide.armed && guide.plan === originalPlan && guide.controls == null && guide.drawing == null && r.speech.active.value == null
+            }
+            val heldSection = guide.section
+            val captures = r.archive.value.audits.count { it.operation == "SCREENSHOT" }
+            SystemClock.sleep(1200)
+            Assert.assertEquals(heldSection, guide.section)
+            Assert.assertEquals(captures, r.archive.value.audits.count { it.operation == "SCREENSHOT" })
+            capture("foreign-popup-suspended")
+            device.findObject(By.text("CLOSE FIXTURE WINDOW")).click()
+            await("Dismissed popup returns player with fresh highlights and speech", 30000) {
+                guide.armed && guide.sourceSnapshot != source && guide.controls != null && guide.drawing != null && r.speech.started.value
+            }
+            Assert.assertEquals(chat, r.current.value)
+            Assert.assertEquals(messages, r.archive.value.conversations.single { it.id == chat }.messages.count { it.role == "user" })
+            Assert.assertFalse(r.archive.value.audits.drop(savedArchive.audits.size).any { it.app == foreign })
+            capture("foreign-popup-resumed")
+        } finally { device.executeShellCommand("am force-stop $foreign") }
+    }
+
+    @Test fun notificationShadePreservesManualPauseAndStopStillCancels() {
+        start(); click(R.string.pause)
+        val plan = guide.plan; val section = guide.section
+        device.openNotification()
+        await("Shade hides paused player") { guide.armed && guide.controls == null && r.speech.active.value == null }
+        device.pressBack()
+        await("Manual pause remains after shade closes") { guide.controls != null && guide.paused }
+        Assert.assertSame(plan, guide.plan); Assert.assertEquals(section, guide.section)
+        SystemClock.sleep(700); Assert.assertNull(r.speech.active.value)
+        click(R.string.explain_resume)
+        await("Resume refreshes and starts speech", 30000) { r.speech.started.value && guide.drawing != null }
+        device.openNotification()
+        await("Second interruption retained") { guide.armed && guide.controls == null }
+        main { r.stop() }
+        device.pressBack(); SystemClock.sleep(1000)
+        Assert.assertFalse(guide.armed); Assert.assertNull(guide.plan); Assert.assertNull(guide.controls); Assert.assertNull(r.speech.active.value)
+    }
+
+    @Test fun feedbackInterruptionKeepsAResumablePlayer() {
+        start(); val plan = guide.plan; val section = guide.section
+        main { r.phone!!.onInterrupt() }
+        await("Feedback interrupted without discarding the listening session") { guide.armed && guide.paused && guide.controls != null && r.speech.active.value == null }
+        Assert.assertSame(plan, guide.plan); Assert.assertEquals(section, guide.section)
+        SystemClock.sleep(700); Assert.assertNull(r.speech.active.value)
+        click(R.string.explain_resume)
+        await("User can continue after feedback interruption", 30000) { guide.drawing != null && r.speech.started.value }
+    }
+
+    @Test fun interruptedContinuationKeepsOnlyTheCurrentAndRemainingSections() {
+        val foreign = "dev.magicphone.windowfixture"
+        Assume.assumeTrue("Install the isolated window fixture", device.executeShellCommand("pm path $foreign").startsWith("package:"))
+        var continuation: String? = null
+        main { guide.arm(pkg) { continuation = it }; r.gateway.start() }
+        val unfinished = "This is the interrupted explanation of the current table value. ".repeat(12)
+        val plan = Explanation(listOf(ExplanationSection("Already explained."), ExplanationSection(unfinished), ExplanationSection("The remaining section.")))
+        presentFresh { plan }
+        main { guide.skip(1) }
+        await("Second section is speaking") { guide.section == 1 && r.speech.started.value }
+        try {
+            device.executeShellCommand("am start -W -n $foreign/.WindowActivity --ei left 80 --ei top 200 --ei width 750 --ei height 450")
+            await("Interrupted section retained") { guide.interrupted && r.speech.active.value == null }
+            Assert.assertEquals(1, guide.section)
+            SystemClock.sleep(1000); Assert.assertNull(continuation)
+            device.findObject(By.text("CLOSE FIXTURE WINDOW")).click()
+            await("Remaining explanation sent for fresh positioning") { continuation != null }
+            Assert.assertEquals("$unfinished\n\nThe remaining section.", continuation)
+            Assert.assertFalse(continuation!!.contains("Already explained"))
+        } finally { device.executeShellCommand("am force-stop $foreign") }
+    }
+
     @Test fun clarificationShowsReplyBubbleAndCanResumeExplanation() {
         start()
         main { r.agent.question.value = "Which part should I explain?"; r.agent.state.value = RunState.WAITING_USER }

@@ -19,6 +19,7 @@ class GuidedExplanation(private val service: PhoneService) {
     var section = 0; private set
     var paused = false; private set
     var refreshing = false; private set
+    var interrupted = false; private set
     var drawing: View? = null; private set
     var controls: View? = null; private set
     val visibleViews get() = listOfNotNull(drawing, controls)
@@ -34,6 +35,7 @@ class GuidedExplanation(private val service: PhoneService) {
     private var dirty = false
     private var speaking = false
     private var suspended = 0
+    private var resumeAgentAfterInterruption = false
     private var epoch = 0L
     private var debounce: Job? = null
     private var monitor: Job? = null
@@ -51,8 +53,7 @@ class GuidedExplanation(private val service: PhoneService) {
             while (isActive) {
                 delay(350)
                 if (runtime.current.value != conversation) { stop(); break }
-                val foreground = service.foregroundPackage()
-                if (foreground.isNotEmpty() && foreground != target && !service.quickPrompt.voiceActive) { stop(); break }
+                if (!checkForeground()) continue
                 val bounds = manager.maximumWindowMetrics.bounds
                 if (bounds != displaySize) { displaySize = bounds; screenChanged() }
                 checkWindowLayout()
@@ -72,9 +73,9 @@ class GuidedExplanation(private val service: PhoneService) {
         val value = action.explanation ?: throw SafeFailure("invalid_action")
         value.validate()
         source = screen; windowLayout = service.explanationLayout(screen.window, screen.displayId)
-        plan = value; section = 0; dirty = false; refreshing = false
+        plan = value; section = 0; dirty = interrupted; refreshing = false
         debounce?.cancel(); debounce = null
-        playSection()
+        if (paused || interrupted) redraw() else playSection()
         return ToolResult("explaining", "Spoken explanation queued locally with synchronized highlights.")
     }
 
@@ -82,11 +83,12 @@ class GuidedExplanation(private val service: PhoneService) {
     fun presentText(text: String) {
         if (!armed || (plan != null && !refreshing) || text.isBlank()) return
         plan = Explanation(text.chunked(1100).take(8).map { ExplanationSection(it) })
-        source = null; section = 0; dirty = false; refreshing = false; playSection()
+        source = null; section = 0; dirty = false; refreshing = false
+        if (paused || interrupted) redraw() else playSection()
     }
 
     private fun playSection() {
-        if (!armed) return
+        if (!armed || interrupted) return
         val value = plan ?: return
         epoch++
         val generation = epoch
@@ -106,10 +108,11 @@ class GuidedExplanation(private val service: PhoneService) {
     }
 
     fun togglePause() {
-        if (!armed) return
+        if (!armed || interrupted) return
         if (paused || section >= (plan?.sections?.size ?: 0)) {
             paused = false
             if (runtime.agent.state.value == RunState.PAUSED) runtime.agent.resume()
+            resumeAgentAfterInterruption = false
             if (refreshing) { if (dirty) scheduleRefresh(); redraw() }
             else { if (section >= (plan?.sections?.size ?: 0)) section = 0; playSection() }
         } else {
@@ -122,18 +125,51 @@ class GuidedExplanation(private val service: PhoneService) {
 
     fun skip(delta: Int) {
         val count = plan?.sections?.size ?: return
-        if (refreshing) return
+        if (refreshing || interrupted) return
         section = (section + delta).coerceIn(0, count)
         playSection()
     }
 
     fun onEvent(event: AccessibilityEvent?) {
         if (!armed || event == null) return
+        if (event.eventType in setOf(AccessibilityEvent.TYPE_WINDOWS_CHANGED, AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) &&
+            !checkForeground()) return
         // Our own overlay insertion/removal also emits window events. Check stable metadata
         // in the monitor instead of invalidating in the middle of a presentation update.
         if (event.packageName?.toString() != target) return
         if (event.eventType in setOf(AccessibilityEvent.TYPE_VIEW_SCROLLED,
                 AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED, AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)) screenChanged()
+    }
+
+    /** A foreign popup is temporary loss of the screen, not deletion of the listening session. */
+    fun interrupt(requireResume: Boolean = false) {
+        if (!armed) return
+        if (requireResume) paused = true
+        if (interrupted) return
+        interrupted = true; revision++; epoch++; speaking = false
+        if (source != null && section < (plan?.sections?.size ?: 0)) dirty = true
+        debounce?.cancel(); debounce = null
+        if (runtime.speech.active.value?.startsWith("explain:") == true) runtime.speech.stop()
+        resumeAgentAfterInterruption = runtime.agent.state.value in setOf(RunState.PLANNING, RunState.ACTING, RunState.WAITING_APPROVAL)
+        if (resumeAgentAfterInterruption) runtime.agent.pause()
+        hideViews(); service.workingBubble.hide()
+    }
+
+    private fun checkForeground(): Boolean {
+        if (!armed) return false
+        if (service.foregroundPackage() != target) { interrupt(); return false }
+        if (interrupted) {
+            interrupted = false
+            if (resumeAgentAfterInterruption && !paused) {
+                resumeAgentAfterInterruption = false
+                runtime.agent.resume()
+            }
+            if (plan != null && !paused) {
+                if (dirty) scheduleRefresh() else playSection()
+            }
+            redraw()
+        }
+        return true
     }
 
     private fun checkWindowLayout() {
@@ -147,16 +183,17 @@ class GuidedExplanation(private val service: PhoneService) {
         revision++
         if (plan == null || section >= plan!!.sections.size) { hideDrawing(); return }
         dirty = true; speaking = false; epoch++; runtime.speech.stop(); hideDrawing()
-        if (!paused) scheduleRefresh()
+        if (!paused && !interrupted) scheduleRefresh()
         redraw()
     }
 
     private fun scheduleRefresh() {
+        if (interrupted) return
         refreshing = true
         debounce?.cancel()
         debounce = runtime.scope.launch {
             delay(500) // Debounce user scrolling/zooming, never a delay on ordinary app actions.
-            if (!armed || paused || runtime.current.value != conversation || service.foregroundPackage() != target) return@launch
+            if (!armed || paused || interrupted || runtime.current.value != conversation || service.foregroundPackage() != target) return@launch
             dirty = false
             refresh?.invoke(plan?.sections?.drop(section)?.joinToString("\n\n") { it.text }.orEmpty())
         }
@@ -188,6 +225,7 @@ class GuidedExplanation(private val service: PhoneService) {
     fun stop() {
         val ownedSpeech = runtime.speech.active.value?.startsWith("explain:") == true
         epoch++; armed = false; speaking = false; paused = false; refreshing = false; dirty = false
+        interrupted = false; resumeAgentAfterInterruption = false
         debounce?.cancel(); debounce = null; monitor?.cancel(); monitor = null
         speechObserver?.cancel(); speechObserver = null
         if (ownedSpeech) runtime.speech.stop()
@@ -201,7 +239,7 @@ class GuidedExplanation(private val service: PhoneService) {
         controls?.let { runCatching { manager.removeView(it) } }; controls = null
     }
     private fun redraw() {
-        if (!armed || suspended > 0 || plan == null) { hideViews(); return }
+        if (!armed || interrupted || suspended > 0 || plan == null) { hideViews(); return }
         hideDrawing()
         if (speaking && !dirty && !refreshing && !paused && source != null && section < plan!!.sections.size) {
             val screen = source!!
